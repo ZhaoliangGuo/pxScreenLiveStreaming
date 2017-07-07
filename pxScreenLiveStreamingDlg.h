@@ -16,11 +16,12 @@ extern "C"
 
 
 // CpxScreenLiveStreamingDlg 对话框
-class CpxScreenLiveStreamingDlg : public CDialogEx
+class CPxScreenLiveStreamingDlg : public CDialogEx
 {
 // 构造
 public:
-	CpxScreenLiveStreamingDlg(CWnd* pParent = NULL);	// 标准构造函数
+	CPxScreenLiveStreamingDlg(CWnd* pParent = NULL);	// 标准构造函数
+	~CPxScreenLiveStreamingDlg();
 
 // 对话框数据
 	enum { IDD = IDD_PXSCREENLIVESTREAMING_DIALOG };

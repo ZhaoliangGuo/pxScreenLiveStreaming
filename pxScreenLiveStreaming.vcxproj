@@ -107,11 +107,10 @@
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="pxBufferPool.h" />
     <ClInclude Include="pxCommonDef.h" />
     <ClInclude Include="pxFLVRecorder.h" />
-    <ClInclude Include="pxScreenAudioCapture.h" />
     <ClInclude Include="pxScreenAudioEncoder.h" />
-    <ClInclude Include="pxScreenVideoCapture.h" />
     <ClInclude Include="pxScreenVideoEncoder.h" />
     <ClInclude Include="pxScreenLiveStreaming.h" />
     <ClInclude Include="pxScreenLiveStreamingDlg.h" />
@@ -120,11 +119,10 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="pxBufferPool.cpp" />
     <ClCompile Include="pxCommonDef.cpp" />
     <ClCompile Include="pxFLVRecorder.cpp" />
-    <ClCompile Include="pxScreenAudioCapture.cpp" />
     <ClCompile Include="pxScreenAudioEncoder.cpp" />
-    <ClCompile Include="pxScreenVideoCapture.cpp" />
     <ClCompile Include="pxScreenVideoEncoder.cpp" />
     <ClCompile Include="pxScreenLiveStreaming.cpp" />
     <ClCompile Include="pxScreenLiveStreamingDlg.cpp" />

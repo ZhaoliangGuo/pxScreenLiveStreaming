@@ -39,12 +39,6 @@
     <ClInclude Include="Resource.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="pxScreenAudioCapture.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="pxScreenVideoCapture.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="pxCommonDef.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -55,6 +49,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="pxFLVRecorder.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="pxBufferPool.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -68,12 +65,6 @@
     <ClCompile Include="stdafx.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="pxScreenAudioCapture.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="pxScreenVideoCapture.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="pxScreenVideoEncoder.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -84,6 +75,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="pxCommonDef.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="pxBufferPool.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

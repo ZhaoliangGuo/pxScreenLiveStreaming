@@ -6,6 +6,7 @@
 #include "pxScreenLiveStreaming.h"
 #include "pxScreenLiveStreamingDlg.h"
 #include "afxdialogex.h"
+#include "pxCommonDef.h"
 
 extern "C"
 {
@@ -19,7 +20,7 @@ extern "C"
 #endif
 
 DWORD WINAPI ThreadStart(LPVOID lp);
-
+DWORD WINAPI ThreadWriteTest(LPVOID lp);
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -57,31 +58,37 @@ END_MESSAGE_MAP()
 
 
 
-CpxScreenLiveStreamingDlg::CpxScreenLiveStreamingDlg(CWnd* pParent /*=NULL*/)
-	: CDialogEx(CpxScreenLiveStreamingDlg::IDD, pParent)
+CPxScreenLiveStreamingDlg::CPxScreenLiveStreamingDlg(CWnd* pParent /*=NULL*/)
+	: CDialogEx(CPxScreenLiveStreamingDlg::IDD, pParent)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
 	m_pBitmapBuffer = NULL;
 }
 
-void CpxScreenLiveStreamingDlg::DoDataExchange(CDataExchange* pDX)
+CPxScreenLiveStreamingDlg::~CPxScreenLiveStreamingDlg()
+{
+	g_oPxBufferPool.ReleaseBufferPool();
+}
+
+
+void CPxScreenLiveStreamingDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 }
 
-BEGIN_MESSAGE_MAP(CpxScreenLiveStreamingDlg, CDialogEx)
+BEGIN_MESSAGE_MAP(CPxScreenLiveStreamingDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
-	ON_BN_CLICKED(IDC_BUTTON_START, &CpxScreenLiveStreamingDlg::OnBnClickedButtonStart)
-	ON_BN_CLICKED(IDC_BUTTON_STOP, &CpxScreenLiveStreamingDlg::OnBnClickedButtonStop)
+	ON_BN_CLICKED(IDC_BUTTON_START, &CPxScreenLiveStreamingDlg::OnBnClickedButtonStart)
+	ON_BN_CLICKED(IDC_BUTTON_STOP, &CPxScreenLiveStreamingDlg::OnBnClickedButtonStop)
 END_MESSAGE_MAP()
 
 
 // CpxScreenLiveStreamingDlg 消息处理程序
 
-BOOL CpxScreenLiveStreamingDlg::OnInitDialog()
+BOOL CPxScreenLiveStreamingDlg::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
 
@@ -111,11 +118,16 @@ BOOL CpxScreenLiveStreamingDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// 设置小图标
 
 	// TODO: 在此添加额外的初始化代码
+	g_oPxBufferPool.InitBufferPool(1024*1024);
+
+	DWORD dwThreadId;
+
+	HANDLE hThread = CreateThread(NULL, NULL, ThreadWriteTest, this, 0, &dwThreadId);
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 
-void CpxScreenLiveStreamingDlg::OnSysCommand(UINT nID, LPARAM lParam)
+void CPxScreenLiveStreamingDlg::OnSysCommand(UINT nID, LPARAM lParam)
 {
 	if ((nID & 0xFFF0) == IDM_ABOUTBOX)
 	{
@@ -132,7 +144,7 @@ void CpxScreenLiveStreamingDlg::OnSysCommand(UINT nID, LPARAM lParam)
 //  来绘制该图标。对于使用文档/视图模型的 MFC 应用程序，
 //  这将由框架自动完成。
 
-void CpxScreenLiveStreamingDlg::OnPaint()
+void CPxScreenLiveStreamingDlg::OnPaint()
 {
 	if (IsIconic())
 	{
@@ -159,14 +171,14 @@ void CpxScreenLiveStreamingDlg::OnPaint()
 
 //当用户拖动最小化窗口时系统调用此函数取得光标
 //显示。
-HCURSOR CpxScreenLiveStreamingDlg::OnQueryDragIcon()
+HCURSOR CPxScreenLiveStreamingDlg::OnQueryDragIcon()
 {
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
 bool g_bStop = false;
 
-void CpxScreenLiveStreamingDlg::OnBnClickedButtonStart()
+void CPxScreenLiveStreamingDlg::OnBnClickedButtonStart()
 {
 	// TODO: 在此添加控件通知处理程序代码
 	g_bStop = false;
@@ -179,7 +191,7 @@ void CpxScreenLiveStreamingDlg::OnBnClickedButtonStart()
 }
 
 
-void CpxScreenLiveStreamingDlg::OnBnClickedButtonStop()
+void CPxScreenLiveStreamingDlg::OnBnClickedButtonStop()
 {
 	// TODO: 在此添加控件通知处理程序代码
 	g_bStop = true;
@@ -187,10 +199,37 @@ void CpxScreenLiveStreamingDlg::OnBnClickedButtonStop()
 
 }
 
+DWORD WINAPI ThreadWriteTest(LPVOID lp)
+{
+	while(true)
+	{
+		while (!g_qCodedBufferList.empty())
+		{
+			SPxBuffer sPxBuffer = g_qCodedBufferList.front();
+
+			FILE *fpH264File = fopen("output_v2.h264", "ab+");
+
+			fwrite(sPxBuffer.lpBuffer, 1, sPxBuffer.nDataLength, fpH264File);
+
+			if (fpH264File)
+			{
+				fclose(fpH264File);
+				fpH264File = NULL;
+			}
+
+			g_qCodedBufferList.pop();
+		}
+
+		Sleep(2);
+	}
+
+	return 0;
+}
+
 // TEST VIDEO
 DWORD WINAPI ThreadStart(LPVOID lp)
 {
-	CpxScreenLiveStreamingDlg *pDlg = (CpxScreenLiveStreamingDlg *)lp;
+	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
 
 	AVCodec        *pCodec    = NULL;
 	AVCodecContext *pCodecCtx = NULL;
@@ -310,8 +349,8 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 		// test unit begin #2 : 
 		// to check the capure result,
 		// save it to a bmp file
-
-		/*CString strCurTime = CTime::GetCurrentTime().Format("_%Y-%m-%d_%H-%M-%S");
+#if SAVE_BMP
+		CString strCurTime = CTime::GetCurrentTime().Format("_%Y-%m-%d_%H-%M-%S");
 
 		CString strBmpFileName = ".\\" + strCurTime + ".bmp";
 
@@ -328,8 +367,8 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 
 		fwrite(pDlg->m_pBitmapBuffer, 1, pDlg->m_nBitmapBufferLen, fp);   // 写入位图数据
 
-		fclose(fp);*/
-
+		fclose(fp);
+#endif
 		// test unit end #2
 
 		// S2: rgb to yuv420p
@@ -344,20 +383,20 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 
 		// test unit #3 begin
 		// check the yuv
-
+#if SAVE_YUV
 		FILE *fp = fopen("output.yuv", "a+");
 
 		if (fp == NULL)
 		{
-			Sleep(1000);
-			continue;
+		Sleep(1000);
+		continue;
 		}
 
 		fwrite(pDlg->m_pYUVBuffer, 1, pDlg->m_nYUVBufferSize, fp);
 
 		fclose(fp);
+#endif
 		// test unit #3 end
-
 
 		// S3: encode yuv420p
 		pFrame->data[0] = pDlg->m_pYUVBuffer;                     // Y
@@ -389,7 +428,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 				nH264BytesCount += pkt.size;
 
 				nVideoFrameCnt++;
-
+#if SAVE_H264
 				FILE *fpH264File = fopen(szOutputFile, "ab+");
 
 				fwrite(pkt.data, 1, pkt.size, fpH264File);
@@ -399,6 +438,13 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 					fclose(fpH264File);
 					fpH264File = NULL;
 				}
+#endif
+
+				int nPos = g_oPxBufferPool.GetEmptyBufferPos();
+				memcpy(g_vlpBufferPool[nPos].lpBuffer, pkt.data, pkt.size);
+				g_vlpBufferPool[nPos].nDataLength = pkt.size;
+
+				g_qCodedBufferList.push(g_vlpBufferPool[nPos]);
 
 				av_free_packet(&pkt);
 			}  
@@ -459,7 +505,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 	return 0;
 }
 
-bool CpxScreenLiveStreamingDlg::Init()
+bool CPxScreenLiveStreamingDlg::Init()
 {
 	/*int nScreenWidth  = GetSystemMetrics(SM_CXSCREEN);
 	int nScreenHeight = GetSystemMetrics(SM_CYSCREEN);*/

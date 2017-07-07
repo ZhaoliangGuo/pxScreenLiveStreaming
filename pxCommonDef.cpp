@@ -79,3 +79,10 @@
 //
 //  return 0;
 //}
+
+vector <SPxBuffer> g_vlpBufferPool;
+
+SPxBufferPool g_oPxBufferPool;
+
+queue <SPxBuffer> g_qCodedBufferList;
+
