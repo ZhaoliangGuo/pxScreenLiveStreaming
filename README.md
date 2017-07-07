@@ -8,8 +8,13 @@ A record and live streaming server for windows screen.
 
 # ToDoList
 - 梳理软件的架构
+
 - 采集本机的音频的数据 编码为aac数据
+
 - 将264视频数据和aac音频数据保存为flv文件
+
+- 支持选择帧率 暂定比如10帧/s 20帧/s 25帧/s 
+
 - 支持rtsp输出
 - 支持http-flv输出
 - 支持hls输出
