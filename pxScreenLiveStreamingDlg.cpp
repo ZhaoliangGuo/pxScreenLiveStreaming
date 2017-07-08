@@ -440,10 +440,15 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 				}
 #endif
 
-				int nPos = g_oPxBufferPool.GetEmptyBufferPos();
+				/*int nPos = g_oPxBufferPool.GetEmptyBufferPos();
 				memcpy(g_vlpBufferPool[nPos].lpBuffer, pkt.data, pkt.size);
 				g_vlpBufferPool[nPos].nDataLength = pkt.size;
 
+				g_qCodedBufferList.push(g_vlpBufferPool[nPos]);*/
+
+				unsigned int uiTimestamp = 0;
+				int nPos = g_oPxBufferPool.GetEmptyBufferPos();
+				g_oPxBufferPool.SetBufferAt(nPos, kePxMediaType_Video, pkt.data, pkt.size, uiTimestamp);
 				g_qCodedBufferList.push(g_vlpBufferPool[nPos]);
 
 				av_free_packet(&pkt);
@@ -481,6 +486,17 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 				fclose(fpH264File);
 				fpH264File = NULL;
 			}
+
+			/*int nPos = g_oPxBufferPool.GetEmptyBufferPos();
+			memcpy(g_vlpBufferPool[nPos].lpBuffer, pkt.data, pkt.size);
+			g_vlpBufferPool[nPos].nDataLength = pkt.size;
+
+			g_qCodedBufferList.push(g_vlpBufferPool[nPos]);*/
+
+			unsigned int uiTimestamp = 0;
+			int nPos = g_oPxBufferPool.GetEmptyBufferPos();
+			g_oPxBufferPool.SetBufferAt(nPos, kePxMediaType_Video, pkt.data, pkt.size, uiTimestamp);
+			g_qCodedBufferList.push(g_vlpBufferPool[nPos]);
 
 			av_free_packet(&pkt);	
 
