@@ -29,6 +29,6 @@ extern UINT64 GetCurrentTimestamp();
 #define SAVE_BMP  0
 #define SAVE_YUV  0
 #define SAVE_H264 1
-#define DEBUG_DURATION 1
+#define DEBUG_DURATION 0
 
 #endif
