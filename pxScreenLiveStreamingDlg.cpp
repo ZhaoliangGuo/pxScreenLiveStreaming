@@ -357,7 +357,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 		GetDIBits(pDlg->m_hMemDC, pDlg->m_hCompatibleBitmap, 0, pDlg->m_nScreenHeight, 
 		pDlg->m_pBitmapBuffer, &pDlg->m_BitmapInfo, DIB_RGB_COLORS);*/
 
-#if DEBUG_DURATION
+#if TIME_ANALYZE_VIDEO
 		UINT64 ui64Start = GetCurrentTimestamp();
 #endif 
 
@@ -371,7 +371,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 				(LPBITMAPINFO) &pDlg->m_BitmapInfoHeader, 
 				DIB_RGB_COLORS);            // 获取位图数据
 
-#if DEBUG_DURATION
+#if TIME_ANALYZE_VIDEO
 		UINT64 ui64BMPDone = GetCurrentTimestamp();
 
 		ZeroMemory(szMsgBuffer, 1024);
@@ -412,7 +412,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 			pDlg->m_nScreenHeight, 
 			pDlg->m_nScreenWidth);
 
-#if DEBUG_DURATION
+#if TIME_ANALYZE_VIDEO
 		UINT64 ui64YUVDone = GetCurrentTimestamp();
 
 		ZeroMemory(szMsgBuffer, 1024);
@@ -485,7 +485,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 
 				g_qCodedBufferList.push(g_vlpBufferPool[nPos]);*/
 
-#if DEBUG_DURATION
+#if TIME_ANALYZE_VIDEO
 				UINT64 ui64H264Done = GetCurrentTimestamp();
 				ZeroMemory(szMsgBuffer, 1024);
 				sprintf_s(szMsgBuffer, 1024, "264: %I64u ms", ui64H264Done - ui64YUVDone);
@@ -498,7 +498,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 
 				UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
 	
-#if DEBUG_DURATION
+#if TIME_ANALYZE_VIDEO
 				ZeroMemory(szMsgBuffer, 1024);
 				sprintf_s(szMsgBuffer, 1024, "Video timestamp: %I64u, Delta:%I64u", ui64TimeStamp, ui64TimeStamp - ui64LastVideTimeStamp);
 				OutputDebugStringA(szMsgBuffer);
@@ -559,7 +559,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 
 			UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
 
-#if DEBUG_DURATION
+#if TIME_ANALYZE_VIDEO
 			ZeroMemory(szMsgBuffer, 1024);
 			sprintf_s(szMsgBuffer, 1024, "Video timestamp: %I64u, Delta:%I64u", ui64TimeStamp, ui64TimeStamp - ui64LastVideTimeStamp);
 			OutputDebugStringA(szMsgBuffer);
