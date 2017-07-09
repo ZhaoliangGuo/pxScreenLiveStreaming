@@ -20,6 +20,7 @@ extern "C"
 #endif
 
 DWORD WINAPI ThreadStart(LPVOID lp);
+DWORD WINAPI ThreadVideoCaptureTest(LPVOID lp);
 DWORD WINAPI ThreadWriteTest(LPVOID lp);
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
@@ -68,7 +69,7 @@ CPxScreenLiveStreamingDlg::CPxScreenLiveStreamingDlg(CWnd* pParent /*=NULL*/)
 
 CPxScreenLiveStreamingDlg::~CPxScreenLiveStreamingDlg()
 {
-	g_oPxBufferPool.ReleaseBufferPool();
+	g_oCodedBufferPool.ReleaseBufferPool();
 }
 
 
@@ -117,8 +118,20 @@ BOOL CPxScreenLiveStreamingDlg::OnInitDialog()
 	SetIcon(m_hIcon, TRUE);			// 设置大图标
 	SetIcon(m_hIcon, FALSE);		// 设置小图标
 
+	Init();
+
 	// TODO: 在此添加额外的初始化代码
-	g_oPxBufferPool.InitBufferPool(1024*1024);
+
+	/*int nScreenWidth  = GetSystemMetrics(SM_CXSCREEN);
+	int nScreenHeight = GetSystemMetrics(SM_CYSCREEN);*/
+	int nYUVBufferSize = m_nScreenWidth * m_nScreenHeight * 1.5;
+
+	g_oYUVBufferPool.InitBufferPool(nYUVBufferSize, 100);
+	g_oCodedBufferPool.InitBufferPool(1024*1024);
+
+	DWORD dwVideoCaptureThreadId;
+
+	HANDLE hVideoCaptureThread = CreateThread(NULL, NULL, ThreadVideoCaptureTest, this, 0, &dwVideoCaptureThreadId);
 
 	DWORD dwThreadId;
 
@@ -183,8 +196,6 @@ void CPxScreenLiveStreamingDlg::OnBnClickedButtonStart()
 	// TODO: 在此添加控件通知处理程序代码
 	g_bStop = false;
 
-	Init();
-
 	DWORD dwThreadId;
 
 	HANDLE hThread = CreateThread(NULL, NULL, ThreadStart, this, 0, &dwThreadId);
@@ -195,8 +206,14 @@ void CPxScreenLiveStreamingDlg::OnBnClickedButtonStop()
 {
 	// TODO: 在此添加控件通知处理程序代码
 	g_bStop = true;
+}
 
 
+DWORD WINAPI ThreadVideoCaptureTest(LPVOID lp)
+{
+
+
+	return 0;
 }
 
 DWORD WINAPI ThreadWriteTest(LPVOID lp)
@@ -316,6 +333,10 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 		return -1;
 	}*/
 
+	UINT64 ui64LastVideTimeStamp = 0; 
+
+	char szMsgBuffer[1024] = {0};
+
 	while (true)
 	{
 		if (g_bStop)
@@ -336,6 +357,10 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 		GetDIBits(pDlg->m_hMemDC, pDlg->m_hCompatibleBitmap, 0, pDlg->m_nScreenHeight, 
 		pDlg->m_pBitmapBuffer, &pDlg->m_BitmapInfo, DIB_RGB_COLORS);*/
 
+#if DEBUG_DURATION
+		UINT64 ui64Start = GetCurrentTimestamp();
+#endif 
+
 		pDlg->memDC.BitBlt(0, 0, pDlg->m_nScreenWidth, pDlg->m_nScreenHeight, pDlg->pDC, 0, 0, SRCCOPY);//复制屏幕图像到内存DC
 
 		GetDIBits(pDlg->memDC.m_hDC, 
@@ -346,6 +371,13 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 				(LPBITMAPINFO) &pDlg->m_BitmapInfoHeader, 
 				DIB_RGB_COLORS);            // 获取位图数据
 
+#if DEBUG_DURATION
+		UINT64 ui64BMPDone = GetCurrentTimestamp();
+
+		ZeroMemory(szMsgBuffer, 1024);
+		sprintf_s(szMsgBuffer, 1024, "BMP: %I64u ms", ui64BMPDone - ui64Start);
+		OutputDebugStringA(szMsgBuffer);
+#endif
 		// test unit begin #2 : 
 		// to check the capure result,
 		// save it to a bmp file
@@ -380,6 +412,13 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 			pDlg->m_nScreenHeight, 
 			pDlg->m_nScreenWidth);
 
+#if DEBUG_DURATION
+		UINT64 ui64YUVDone = GetCurrentTimestamp();
+
+		ZeroMemory(szMsgBuffer, 1024);
+		sprintf_s(szMsgBuffer, 1024, "YUV: %I64u ms", ui64YUVDone - ui64BMPDone);
+		OutputDebugStringA(szMsgBuffer);
+#endif 
 
 		// test unit #3 begin
 		// check the yuv
@@ -446,10 +485,32 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 
 				g_qCodedBufferList.push(g_vlpBufferPool[nPos]);*/
 
-				unsigned int uiTimestamp = 0;
-				int nPos = g_oPxBufferPool.GetEmptyBufferPos();
-				g_oPxBufferPool.SetBufferAt(nPos, kePxMediaType_Video, pkt.data, pkt.size, uiTimestamp);
-				g_qCodedBufferList.push(g_vlpBufferPool[nPos]);
+#if DEBUG_DURATION
+				UINT64 ui64H264Done = GetCurrentTimestamp();
+				ZeroMemory(szMsgBuffer, 1024);
+				sprintf_s(szMsgBuffer, 1024, "264: %I64u ms", ui64H264Done - ui64YUVDone);
+				OutputDebugStringA(szMsgBuffer);
+#endif
+				
+				//unsigned int uiTimestamp = 0;
+				timeval tvTimestamp;
+				gettimeofday(&tvTimestamp, NULL);
+
+				UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
+	
+#if DEBUG_DURATION
+				ZeroMemory(szMsgBuffer, 1024);
+				sprintf_s(szMsgBuffer, 1024, "Video timestamp: %I64u, Delta:%I64u", ui64TimeStamp, ui64TimeStamp - ui64LastVideTimeStamp);
+				OutputDebugStringA(szMsgBuffer);
+#endif 
+
+				ui64LastVideTimeStamp = ui64TimeStamp;
+
+				/*tvTimestamp.tv_sec = 0;
+				tvTimestamp.tv_usec = 0;*/
+				int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
+				g_oCodedBufferPool.SetBufferAt(nPos, kePxMediaType_Video, pkt.data, pkt.size, tvTimestamp);
+				g_qCodedBufferList.push(g_vCodedBufferPool[nPos]);
 
 				av_free_packet(&pkt);
 			}  
@@ -458,7 +519,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 		// S4: calculate the timestamp 
 		// and add the video encoded buffer to video buffer list 
 
-		Sleep(40);
+		//Sleep(40);
 	}
 
 	//Flush Encoder
@@ -493,10 +554,24 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 
 			g_qCodedBufferList.push(g_vlpBufferPool[nPos]);*/
 
-			unsigned int uiTimestamp = 0;
-			int nPos = g_oPxBufferPool.GetEmptyBufferPos();
-			g_oPxBufferPool.SetBufferAt(nPos, kePxMediaType_Video, pkt.data, pkt.size, uiTimestamp);
-			g_qCodedBufferList.push(g_vlpBufferPool[nPos]);
+			timeval tvTimestamp;
+			gettimeofday(&tvTimestamp, NULL);
+
+			UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
+
+#if DEBUG_DURATION
+			ZeroMemory(szMsgBuffer, 1024);
+			sprintf_s(szMsgBuffer, 1024, "Video timestamp: %I64u, Delta:%I64u", ui64TimeStamp, ui64TimeStamp - ui64LastVideTimeStamp);
+			OutputDebugStringA(szMsgBuffer);
+#endif
+
+			ui64LastVideTimeStamp = ui64TimeStamp;
+
+			/*tvTimestamp.tv_sec = 0;
+			tvTimestamp.tv_usec = 0;*/
+			int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
+			g_oCodedBufferPool.SetBufferAt(nPos, kePxMediaType_Video, pkt.data, pkt.size, tvTimestamp);
+			g_qCodedBufferList.push(g_vCodedBufferPool[nPos]);
 
 			av_free_packet(&pkt);	
 

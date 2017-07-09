@@ -105,10 +105,12 @@
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">nasm -o $(IntDir)%(Filename).obj -f win32 -DPREFIX %(FullPath)</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
     </CustomBuild>
+    <None Include="ToDoList.txt" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pxBufferPool.h" />
     <ClInclude Include="pxCommonDef.h" />
+    <ClInclude Include="pxFLVCommonfDef.h" />
     <ClInclude Include="pxFLVRecorder.h" />
     <ClInclude Include="pxScreenAudioEncoder.h" />
     <ClInclude Include="pxScreenVideoEncoder.h" />

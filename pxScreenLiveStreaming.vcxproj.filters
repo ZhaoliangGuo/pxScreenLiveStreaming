@@ -22,6 +22,9 @@
     <None Include="res\pxScreenLiveStreaming.ico">
       <Filter>资源文件</Filter>
     </None>
+    <None Include="ToDoList.txt">
+      <Filter>资源文件</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pxScreenLiveStreaming.h">
@@ -52,6 +55,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="pxBufferPool.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="pxFLVCommonfDef.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

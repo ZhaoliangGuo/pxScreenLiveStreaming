@@ -19,14 +19,15 @@ struct SPxBuffer
 	EPxMediaType eMediaType;
 	LPBYTE       lpBuffer;
 	int          nDataLength;
-	unsigned int uiTimestamp;
+	timeval      tvTimestamp;
 
 	SPxBuffer()
 	{
 		eMediaType  = kePxMediaType_Invalid;
 		lpBuffer    = NULL;
 		nDataLength = 0;
-		uiTimestamp = 0;
+		tvTimestamp.tv_sec  = 0;
+		tvTimestamp.tv_usec = 0;
 	}
 
 	~SPxBuffer()
@@ -34,7 +35,8 @@ struct SPxBuffer
 		eMediaType  = kePxMediaType_Invalid;
 		lpBuffer    = NULL;
 		nDataLength = 0;
-		uiTimestamp = 0;
+		tvTimestamp.tv_sec  = 0;
+		tvTimestamp.tv_usec = 0;
 	}
 };
 
@@ -55,7 +57,7 @@ public:
 		             EPxMediaType in_keMediaType, 
 					 uint8_t *in_ui8Data, 
 					 int in_nDataLength, 
-					 unsigned int uiTimestamp);
+					 timeval in_tvTimestamp);
 
 public:
 	int m_nBufferListLen;

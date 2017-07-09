@@ -3,7 +3,7 @@
 #include <vector>
 using namespace std;
 
-extern vector <SPxBuffer> g_vlpBufferPool;
+extern vector <SPxBuffer> g_vCodedBufferPool;
 
 SPxBufferPool::SPxBufferPool(void)
 {
@@ -39,14 +39,14 @@ int SPxBufferPool::InitBufferPool(int in_nBufferSize, int in_nBufferPoolLen)
 			break;
 		}
 
-		g_vlpBufferPool.push_back(sPxBuffer);
+		g_vCodedBufferPool.push_back(sPxBuffer);
 	}
 
-	m_nBufferListLen = g_vlpBufferPool.size();
+	m_nBufferListLen = g_vCodedBufferPool.size();
 
 	::LeaveCriticalSection(&g_csBufferPool);  
 
-	return g_vlpBufferPool.size();
+	return g_vCodedBufferPool.size();
 }
 
 void SPxBufferPool::ReleaseBufferPool()
@@ -54,13 +54,13 @@ void SPxBufferPool::ReleaseBufferPool()
 	::EnterCriticalSection(&g_csBufferPool);
 	SPxBuffer sPxBuffer;
 
-	while (!g_vlpBufferPool.empty())
+	while (!g_vCodedBufferPool.empty())
 	{
-		sPxBuffer = g_vlpBufferPool.back();
+		sPxBuffer = g_vCodedBufferPool.back();
 		VirtualFree(sPxBuffer.lpBuffer, 0, MEM_RELEASE);
 		sPxBuffer.lpBuffer = NULL;
 
-		g_vlpBufferPool.pop_back();
+		g_vCodedBufferPool.pop_back();
 	}
 
 	::LeaveCriticalSection(&g_csBufferPool);  
@@ -94,14 +94,14 @@ void SPxBufferPool::SetBufferAt(int in_nPos,
 								EPxMediaType in_keMediaType, 
 								uint8_t *in_ui8Data, 
 								int in_nDataLength, 
-								unsigned int uiTimestamp )
+								timeval in_tvTimestamp )
 {
 	::EnterCriticalSection(&g_csBufferPool);
 
-	g_vlpBufferPool[in_nPos].eMediaType  = in_keMediaType;
-	memcpy(g_vlpBufferPool[in_nPos].lpBuffer, in_ui8Data, in_nDataLength);
-	g_vlpBufferPool[in_nPos].nDataLength = in_nDataLength;
-	g_vlpBufferPool[in_nPos].uiTimestamp = uiTimestamp;
+	g_vCodedBufferPool[in_nPos].eMediaType  = in_keMediaType;
+	memcpy(g_vCodedBufferPool[in_nPos].lpBuffer, in_ui8Data, in_nDataLength);
+	g_vCodedBufferPool[in_nPos].nDataLength = in_nDataLength;
+	g_vCodedBufferPool[in_nPos].tvTimestamp = in_tvTimestamp;
 
 	::LeaveCriticalSection(&g_csBufferPool); 
 }
