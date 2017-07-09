@@ -5,6 +5,8 @@ A record and live streaming server for windows screen.
 
 # AlreadyDone
 - 采集计算机本机的画面，并将其编码为.264格式
+- 分析视频各阶段耗时
+![结合DebugView++分析视频各阶段耗时](https://github.com/ZhaoliangGuo/Resources/blob/master/images/time_analyze.jpg)
 
 # ToDoList
 - 梳理软件的架构
