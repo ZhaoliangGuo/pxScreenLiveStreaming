@@ -20,23 +20,26 @@ struct SPxBuffer
 	LPBYTE       lpBuffer;
 	int          nDataLength;
 	timeval      tvTimestamp;
+	bool         bVideoKeyFrame;
 
 	SPxBuffer()
 	{
-		eMediaType  = kePxMediaType_Invalid;
-		lpBuffer    = NULL;
-		nDataLength = 0;
+		eMediaType          = kePxMediaType_Invalid;
+		lpBuffer            = NULL;
+		nDataLength         = 0;
 		tvTimestamp.tv_sec  = 0;
 		tvTimestamp.tv_usec = 0;
+		bVideoKeyFrame      = false;
 	}
 
 	~SPxBuffer()
 	{
-		eMediaType  = kePxMediaType_Invalid;
-		lpBuffer    = NULL;
-		nDataLength = 0;
+		eMediaType          = kePxMediaType_Invalid;
+		lpBuffer            = NULL;
+		nDataLength         = 0;
 		tvTimestamp.tv_sec  = 0;
 		tvTimestamp.tv_usec = 0;
+		bVideoKeyFrame      = false;
 	}
 };
 
@@ -53,12 +56,12 @@ public:
 	void ReleaseBufferPool();
 
 	int GetEmptyBufferPos();
-	void SetBufferAt(int in_nPos, 
+	/*void SetBufferAt(int in_nPos, 
 		             EPxMediaType in_keMediaType, 
 					 uint8_t *in_ui8Data, 
 					 int in_nDataLength, 
-					 timeval in_tvTimestamp);
-
+					 timeval in_tvTimestamp);*/
+	void SetBufferAt(int in_nPos, SPxBuffer *in_psBuffer );
 public:
 	int m_nBufferListLen;
 	int m_nCurPos;// 指向下一个空闲的buffer的下标

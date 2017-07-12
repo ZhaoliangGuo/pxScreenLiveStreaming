@@ -13,6 +13,8 @@ extern "C"
 		unsigned char *src, int width, int height, int stride);
 }
 
+#define AVC_SEQUENCE_HEADER_LEN (1024)
+#define AAC_SEQUENCE_HEADER_LEN (512)
 
 
 // CpxScreenLiveStreamingDlg ¶Ô»°¿ò

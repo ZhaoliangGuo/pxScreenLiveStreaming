@@ -7,7 +7,7 @@ using namespace std;
 
 #include "Windows.h"
 #include "pxBufferPool.h"
-//#include "pxFLVCommonfDef.h"
+#include "pxErrorDef.h"
 
 // ¶¨ÒåÄÚ´æ³Ø
 extern struct SPxBuffer;
@@ -29,6 +29,15 @@ extern UINT64 GetCurrentTimestamp();
 #define SAVE_BMP  0
 #define SAVE_YUV  0
 #define SAVE_H264 1
+#define SAVE_H264_FROM_BUFFERLIST 0
 #define TIME_ANALYZE_VIDEO 0
+
+#define AV_RB24(x)  ((((uint8_t*)(x))[0] << 16) | \
+	(((uint8_t*)(x))[1] <<  8) | \
+	((uint8_t*)(x))[2])
+#define AV_RB32(x)  ((((uint8_t*)(x))[0] << 24) | \
+	(((uint8_t*)(x))[1] << 16) | \
+	(((uint8_t*)(x))[2] <<  8) | \
+	((uint8_t*)(x))[3])
 
 #endif

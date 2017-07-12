@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="FLV">
+      <UniqueIdentifier>{c55819d6-220f-4f10-92a7-e04e3ea5e0f9}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="ReadMe.txt" />
@@ -51,13 +54,25 @@
     <ClInclude Include="pxScreenAudioEncoder.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="pxFLVRecorder.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="pxBufferPool.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="pxFLVCommonfDef.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="pxFLVRecorder.h">
+      <Filter>FLV</Filter>
+    </ClInclude>
+    <ClInclude Include="CPxFLVMuxer.h">
+      <Filter>FLV</Filter>
+    </ClInclude>
+    <ClInclude Include="pxFLVGlobal.h">
+      <Filter>FLV</Filter>
+    </ClInclude>
+    <ClInclude Include="pxErrorDef.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="pxRecordDef.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -77,14 +92,17 @@
     <ClCompile Include="pxScreenAudioEncoder.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="pxFLVRecorder.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="pxCommonDef.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="pxBufferPool.cpp">
       <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="pxFLVRecorder.cpp">
+      <Filter>FLV</Filter>
+    </ClCompile>
+    <ClCompile Include="CPxFLVMuxer.cpp">
+      <Filter>FLV</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

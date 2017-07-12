@@ -7,6 +7,11 @@
 #include "pxScreenLiveStreamingDlg.h"
 #include "afxdialogex.h"
 #include "pxCommonDef.h"
+#include "pxFLVRecorder.h"
+//#include "pxFLVCommonfDef.h"
+
+char szAVCSequenceHeader[AVC_SEQUENCE_HEADER_LEN];
+char szAACSequenceHeader[AAC_SEQUENCE_HEADER_LEN];
 
 extern "C"
 {
@@ -218,12 +223,18 @@ DWORD WINAPI ThreadVideoCaptureTest(LPVOID lp)
 
 DWORD WINAPI ThreadWriteTest(LPVOID lp)
 {
+	CPxFLVRecorder oFLVRecorder;
+	char *szFLVFileName = "output.flv";
+	oFLVRecorder.SetFileName(szFLVFileName);
+	oFLVRecorder.Begin();
+
 	while(true)
 	{
 		while (!g_qCodedBufferList.empty())
 		{
 			SPxBuffer sPxBuffer = g_qCodedBufferList.front();
 
+#if SAVE_H264_FROM_BUFFERLIST
 			FILE *fpH264File = fopen("output_v2.h264", "ab+");
 
 			fwrite(sPxBuffer.lpBuffer, 1, sPxBuffer.nDataLength, fpH264File);
@@ -233,12 +244,22 @@ DWORD WINAPI ThreadWriteTest(LPVOID lp)
 				fclose(fpH264File);
 				fpH264File = NULL;
 			}
+#endif
+			oFLVRecorder.ReceiveVideoData(0, "127.0.0.1", &sPxBuffer);
 
 			g_qCodedBufferList.pop();
 		}
 
 		Sleep(2);
+
+		if (g_bStop)
+		{
+		break;
+		}
 	}
+
+	oFLVRecorder.End();
+	oFLVRecorder.Close();
 
 	return 0;
 }
@@ -337,6 +358,8 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 
 	char szMsgBuffer[1024] = {0};
 
+	SPxBuffer sTempBuffer;
+
 	while (true)
 	{
 		if (g_bStop)
@@ -360,6 +383,9 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 #if TIME_ANALYZE_VIDEO
 		UINT64 ui64Start = GetCurrentTimestamp();
 #endif 
+
+		timeval tvTimestamp;
+		gettimeofday(&tvTimestamp, NULL);
 
 		pDlg->memDC.BitBlt(0, 0, pDlg->m_nScreenWidth, pDlg->m_nScreenHeight, pDlg->pDC, 0, 0, SRCCOPY);//¸´ÖÆÆÁÄ»Í¼Ïñµ½ÄÚ´æDC
 
@@ -493,23 +519,51 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 #endif
 				
 				//unsigned int uiTimestamp = 0;
-				timeval tvTimestamp;
-				gettimeofday(&tvTimestamp, NULL);
+				
 
-				UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
-	
 #if TIME_ANALYZE_VIDEO
+				UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
+
 				ZeroMemory(szMsgBuffer, 1024);
 				sprintf_s(szMsgBuffer, 1024, "Video timestamp: %I64u, Delta:%I64u", ui64TimeStamp, ui64TimeStamp - ui64LastVideTimeStamp);
 				OutputDebugStringA(szMsgBuffer);
+				ui64LastVideTimeStamp = ui64TimeStamp;
 #endif 
 
-				ui64LastVideTimeStamp = ui64TimeStamp;
+				int nNALType = 0;
 
-				/*tvTimestamp.tv_sec = 0;
-				tvTimestamp.tv_usec = 0;*/
+				if (pkt.size > 5)
+				{
+					if (AV_RB32(pkt.data) == 0x00000001)	
+					{
+						nNALType = pkt.data[4] & 0x1F;
+					}
+					else if (AV_RB24(pkt.data) == 0x000001)
+					{
+						nNALType = pkt.data[3] & 0x1F;
+					}
+
+					if (5 == nNALType
+						||
+						7 == nNALType
+						||
+						8 == nNALType)
+					{
+						sTempBuffer.bVideoKeyFrame = true;
+					}
+					else
+					{
+						sTempBuffer.bVideoKeyFrame = false;
+					}
+				}
+
+				sTempBuffer.lpBuffer    = pkt.data;
+				sTempBuffer.nDataLength = pkt.size;
+				sTempBuffer.eMediaType  = kePxMediaType_Video;
+				sTempBuffer.tvTimestamp = tvTimestamp;
+
 				int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
-				g_oCodedBufferPool.SetBufferAt(nPos, kePxMediaType_Video, pkt.data, pkt.size, tvTimestamp);
+				g_oCodedBufferPool.SetBufferAt(nPos, &sTempBuffer);
 				g_qCodedBufferList.push(g_vCodedBufferPool[nPos]);
 
 				av_free_packet(&pkt);
@@ -538,6 +592,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 		{
 			printf("Flush Encoder: Succeed to encode 1 frame!\tsize:%5d\n", pkt.size);
 
+#if SAVE_H264
 			FILE *fpH264File = fopen(szOutputFile, "ab+");
 
 			fwrite(pkt.data, 1, pkt.size, fpH264File);
@@ -547,7 +602,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 				fclose(fpH264File);
 				fpH264File = NULL;
 			}
-
+#endif
 			/*int nPos = g_oPxBufferPool.GetEmptyBufferPos();
 			memcpy(g_vlpBufferPool[nPos].lpBuffer, pkt.data, pkt.size);
 			g_vlpBufferPool[nPos].nDataLength = pkt.size;
@@ -557,20 +612,52 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 			timeval tvTimestamp;
 			gettimeofday(&tvTimestamp, NULL);
 
-			UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
 
 #if TIME_ANALYZE_VIDEO
+			UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
+
 			ZeroMemory(szMsgBuffer, 1024);
 			sprintf_s(szMsgBuffer, 1024, "Video timestamp: %I64u, Delta:%I64u", ui64TimeStamp, ui64TimeStamp - ui64LastVideTimeStamp);
 			OutputDebugStringA(szMsgBuffer);
-#endif
-
 			ui64LastVideTimeStamp = ui64TimeStamp;
+#endif
 
 			/*tvTimestamp.tv_sec = 0;
 			tvTimestamp.tv_usec = 0;*/
-			int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
+			/*int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
 			g_oCodedBufferPool.SetBufferAt(nPos, kePxMediaType_Video, pkt.data, pkt.size, tvTimestamp);
+			g_qCodedBufferList.push(g_vCodedBufferPool[nPos]);*/
+
+			int nNALType = 0;
+
+			if (pkt.size > 5)
+			{
+				if (AV_RB32(pkt.data) == 0x00000001)	
+				{
+					nNALType = pkt.data[4] & 0x1F;
+				}
+				else if (AV_RB24(pkt.data) == 0x000001)
+				{
+					nNALType = pkt.data[3] & 0x1F;
+				}
+
+				if (5 == nNALType)
+				{
+					sTempBuffer.bVideoKeyFrame = true;
+				}
+				else
+				{
+					sTempBuffer.bVideoKeyFrame = false;
+				}
+			}
+
+			sTempBuffer.lpBuffer    = pkt.data;
+			sTempBuffer.nDataLength = pkt.size;
+			sTempBuffer.eMediaType  = kePxMediaType_Video;
+			sTempBuffer.tvTimestamp = tvTimestamp;
+
+			int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
+			g_oCodedBufferPool.SetBufferAt(nPos, &sTempBuffer);
 			g_qCodedBufferList.push(g_vCodedBufferPool[nPos]);
 
 			av_free_packet(&pkt);	

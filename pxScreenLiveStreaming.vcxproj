@@ -108,10 +108,14 @@
     <None Include="ToDoList.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CPxFLVMuxer.h" />
     <ClInclude Include="pxBufferPool.h" />
     <ClInclude Include="pxCommonDef.h" />
+    <ClInclude Include="pxErrorDef.h" />
     <ClInclude Include="pxFLVCommonfDef.h" />
+    <ClInclude Include="pxFLVGlobal.h" />
     <ClInclude Include="pxFLVRecorder.h" />
+    <ClInclude Include="pxRecordDef.h" />
     <ClInclude Include="pxScreenAudioEncoder.h" />
     <ClInclude Include="pxScreenVideoEncoder.h" />
     <ClInclude Include="pxScreenLiveStreaming.h" />
@@ -121,6 +125,7 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CPxFLVMuxer.cpp" />
     <ClCompile Include="pxBufferPool.cpp" />
     <ClCompile Include="pxCommonDef.cpp" />
     <ClCompile Include="pxFLVRecorder.cpp" />

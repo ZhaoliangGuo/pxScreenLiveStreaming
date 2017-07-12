@@ -91,17 +91,31 @@ int SPxBufferPool::GetEmptyBufferPos()
 }
 
 void SPxBufferPool::SetBufferAt(int in_nPos, 
-								EPxMediaType in_keMediaType, 
-								uint8_t *in_ui8Data, 
-								int in_nDataLength, 
-								timeval in_tvTimestamp )
+								SPxBuffer *in_psBuffer )
 {
 	::EnterCriticalSection(&g_csBufferPool);
 
-	g_vCodedBufferPool[in_nPos].eMediaType  = in_keMediaType;
-	memcpy(g_vCodedBufferPool[in_nPos].lpBuffer, in_ui8Data, in_nDataLength);
-	g_vCodedBufferPool[in_nPos].nDataLength = in_nDataLength;
-	g_vCodedBufferPool[in_nPos].tvTimestamp = in_tvTimestamp;
+	g_vCodedBufferPool[in_nPos].eMediaType     = in_psBuffer->eMediaType;
+	memcpy(g_vCodedBufferPool[in_nPos].lpBuffer, in_psBuffer->lpBuffer, in_psBuffer->nDataLength);
+	g_vCodedBufferPool[in_nPos].nDataLength    = in_psBuffer->nDataLength;
+	g_vCodedBufferPool[in_nPos].tvTimestamp    = in_psBuffer->tvTimestamp;
+	g_vCodedBufferPool[in_nPos].bVideoKeyFrame = in_psBuffer->bVideoKeyFrame;
 
 	::LeaveCriticalSection(&g_csBufferPool); 
 }
+
+//void SPxBufferPool::SetBufferAt(int in_nPos, 
+//	EPxMediaType in_keMediaType, 
+//	uint8_t *in_ui8Data, 
+//	int in_nDataLength, 
+//	timeval in_tvTimestamp )
+//{
+//	::EnterCriticalSection(&g_csBufferPool);
+//
+//	g_vCodedBufferPool[in_nPos].eMediaType  = in_keMediaType;
+//	memcpy(g_vCodedBufferPool[in_nPos].lpBuffer, in_ui8Data, in_nDataLength);
+//	g_vCodedBufferPool[in_nPos].nDataLength = in_nDataLength;
+//	g_vCodedBufferPool[in_nPos].tvTimestamp = in_tvTimestamp;
+//
+//	::LeaveCriticalSection(&g_csBufferPool); 
+//}
