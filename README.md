@@ -4,7 +4,7 @@ A record and live streaming server for windows screen.
 用于采集计算机本机的视频和音频，支持保存为flv文件，支持rtsp/http-flv/hls/rtmp输出。
 
 # AlreadyDone
-- 采集计算机本机的画面，并将其编码为.264格式
+- 采集计算机本机的画面，并将其编码为.264格式 并可保存为flv文件
 - 分析视频各阶段耗时
 比如采集bmp耗时多少
 比如bmp转换为yuv耗时多少
