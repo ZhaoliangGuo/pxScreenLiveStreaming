@@ -395,7 +395,7 @@ DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
 		GetDIBits(pDlg->m_hMemDC, pDlg->m_hCompatibleBitmap, 0, pDlg->m_nScreenHeight, 
 		pDlg->m_pBitmapBuffer, &pDlg->m_BitmapInfo, DIB_RGB_COLORS);*/
 
-#if VIDEO_TIME_ANALYZE
+#if DEBUG_VIDEO_TIME_ANALYZE
 		UINT64 ui64Start = GetCurrentTimestamp();
 #endif 
 
@@ -412,7 +412,7 @@ DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
 				(LPBITMAPINFO) &pDlg->m_BitmapInfoHeader, 
 				DIB_RGB_COLORS);            // 获取位图数据
 
-#if VIDEO_TIME_ANALYZE
+#if DEBUG_VIDEO_TIME_ANALYZE
 		UINT64 ui64BMPDone = GetCurrentTimestamp();
 
 		ZeroMemory(szMsgBuffer, 1024);
@@ -453,7 +453,7 @@ DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
 			pDlg->m_nScreenHeight, 
 			pDlg->m_nScreenWidth);
 
-#if VIDEO_TIME_ANALYZE
+#if DEBUG_VIDEO_TIME_ANALYZE
 		UINT64 ui64YUVDone = GetCurrentTimestamp();
 
 		ZeroMemory(szMsgBuffer, 1024);
@@ -524,7 +524,7 @@ DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
 
 				g_qCodedBufferList.push(g_vlpBufferPool[nPos]);*/
 
-#if VIDEO_TIME_ANALYZE
+#if DEBUG_VIDEO_TIME_ANALYZE
 				UINT64 ui64H264Done = GetCurrentTimestamp();
 				ZeroMemory(szMsgBuffer, 1024);
 				sprintf_s(szMsgBuffer, 1024, "264: %I64u ms", ui64H264Done - ui64YUVDone);
@@ -534,7 +534,7 @@ DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
 				//unsigned int uiTimestamp = 0;
 				
 
-#if VIDEO_TIME_ANALYZE
+#if DEBUG_VIDEO_TIME_ANALYZE
 				UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
 
 				ZeroMemory(szMsgBuffer, 1024);
@@ -626,7 +626,7 @@ DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
 			gettimeofday(&tvTimestamp, NULL);
 
 
-#if VIDEO_TIME_ANALYZE
+#if DEBUG_VIDEO_TIME_ANALYZE
 			UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
 
 			ZeroMemory(szMsgBuffer, 1024);
@@ -954,13 +954,13 @@ DWORD CALLBACK MicrophoneCallback(HWAVEIN hwavein, UINT uMsg, DWORD dwInstance, 
 	switch(uMsg)   
 	{  
 	case WIM_OPEN:
-#if DEBUG_CAPTURE_PCM
+#if DEBUG_AUDIO_CAPTURE_PCM
 		OutputDebugStringA("WIM_OPEN\n"); 
 #endif 
 		break;  
 
 	case WIM_DATA: 
-#if DEBUG_CAPTURE_PCM
+#if DEBUG_AUDIO_CAPTURE_PCM
 		OutputDebugStringA("WIM_DATA\n"); 
 #endif
 		//这里就是对采集到的数据做处理的地方，我是做了发送处理  
@@ -977,7 +977,7 @@ DWORD CALLBACK MicrophoneCallback(HWAVEIN hwavein, UINT uMsg, DWORD dwInstance, 
 		break;  
 
 	case WIM_CLOSE: 
-#if DEBUG_CAPTURE_PCM
+#if DEBUG_AUDIO_CAPTURE_PCM
 		OutputDebugStringA("WIM_CLOSE\n");  
 #endif
 
