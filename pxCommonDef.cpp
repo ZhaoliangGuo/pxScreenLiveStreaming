@@ -9,6 +9,7 @@ SPxBufferPool      g_oYUVBufferPool;
 vector <SPxBuffer> g_vCodedBufferPool;
 SPxBufferPool      g_oCodedBufferPool;
 queue <SPxBuffer>  g_qCodedBufferList;
+CRITICAL_SECTION   g_csBufferPool;
 
 // used to make sure that static variables in gettimeofday() aren't initialized simultaneously by multiple threads
 #define _WIN32_WCE (1)

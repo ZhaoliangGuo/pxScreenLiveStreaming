@@ -4,6 +4,7 @@
 using namespace std;
 
 extern vector <SPxBuffer> g_vCodedBufferPool;
+extern CRITICAL_SECTION   g_csBufferPool;
 
 SPxBufferPool::SPxBufferPool(void)
 {

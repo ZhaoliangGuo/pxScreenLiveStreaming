@@ -9,6 +9,9 @@ using namespace std;
 #include "pxBufferPool.h"
 #include "pxErrorDef.h"
 
+// 音频采集
+#include <mmsystem.h>
+
 // 定义内存池
 extern struct SPxBuffer;
 
@@ -21,16 +24,22 @@ extern SPxBufferPool      g_oYUVBufferPool;
 extern vector <SPxBuffer> g_vCodedBufferPool; // 存储编码后数据的内存池(H.264/AAC)
 extern SPxBufferPool      g_oCodedBufferPool;
 extern queue <SPxBuffer>  g_qCodedBufferList; // 存储编码后数据的队列
+extern CRITICAL_SECTION   g_csBufferPool;
 
 extern int gettimeofday(struct timeval*, int*);
 
 extern UINT64 GetCurrentTimestamp();
 
-#define SAVE_BMP  0
-#define SAVE_YUV  0
-#define SAVE_H264 1
-#define SAVE_H264_FROM_BUFFERLIST 0
-#define TIME_ANALYZE_VIDEO 0
+#define VIDEO_SAVE_BMP  0
+#define VIDEO_SAVE_YUV  0
+#define VIDEO_SAVE_H264 0
+#define VIDEO_SAVE_H264_FROM_BUFFERLIST 0
+#define VIDEO_TIME_ANALYZE 0
+
+#define DEBUG_CAPTURE_PCM 1
+#define AUDIO_SAVE_PCM 1
+#define AUDIO_SAVE_AAC 0
+#define AUDIO_SAVE_AAC_FROM_BUFFERLIST 0
 
 #define AV_RB24(x)  ((((uint8_t*)(x))[0] << 16) | \
 	(((uint8_t*)(x))[1] <<  8) | \

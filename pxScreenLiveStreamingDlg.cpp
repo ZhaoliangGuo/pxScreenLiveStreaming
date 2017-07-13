@@ -13,6 +13,8 @@
 char szAVCSequenceHeader[AVC_SEQUENCE_HEADER_LEN];
 char szAACSequenceHeader[AAC_SEQUENCE_HEADER_LEN];
 
+static WAVEFORMATEX g_sWaveFormat;
+
 extern "C"
 {
 #include "libavutil/opt.h"
@@ -24,9 +26,18 @@ extern "C"
 #define new DEBUG_NEW
 #endif
 
-DWORD WINAPI ThreadStart(LPVOID lp);
+DWORD WINAPI ThreadVideoEncoder(LPVOID lp);
 DWORD WINAPI ThreadVideoCaptureTest(LPVOID lp);
 DWORD WINAPI ThreadWriteTest(LPVOID lp);
+DWORD WINAPI ThreadAudioEncoder(LPVOID lp);
+
+void CALLBACK waveInProc( 
+	HWAVEIN hwi,    //声音输入设备句柄
+	UINT uMsg,      //产生的消息，由系统给出
+	DWORD dwInstance,//在waveinopen中给出要传递给该函数的数据
+	DWORD dwParam1, //附加数据１
+	DWORD dwParam2  //附加数据２
+	);
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -194,16 +205,21 @@ HCURSOR CPxScreenLiveStreamingDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
-bool g_bStop = false;
+bool g_bStop         = false;
+bool g_bVideoDataFinished = false;
 
 void CPxScreenLiveStreamingDlg::OnBnClickedButtonStart()
 {
 	// TODO: 在此添加控件通知处理程序代码
-	g_bStop = false;
+	g_bStop         = false;
+	g_bVideoDataFinished = false;
 
-	DWORD dwThreadId;
+	DWORD dwVideoThreadId;
 
-	HANDLE hThread = CreateThread(NULL, NULL, ThreadStart, this, 0, &dwThreadId);
+	HANDLE hThread = CreateThread(NULL, NULL, ThreadVideoEncoder, this, 0, &dwVideoThreadId);
+
+	DWORD dwAudioThreadId;
+	HANDLE hAudioEncodeThread = CreateThread(NULL, NULL, ThreadAudioEncoder, this, 0, &dwAudioThreadId);
 }
 
 
@@ -216,7 +232,6 @@ void CPxScreenLiveStreamingDlg::OnBnClickedButtonStop()
 
 DWORD WINAPI ThreadVideoCaptureTest(LPVOID lp)
 {
-
 
 	return 0;
 }
@@ -234,7 +249,7 @@ DWORD WINAPI ThreadWriteTest(LPVOID lp)
 		{
 			SPxBuffer sPxBuffer = g_qCodedBufferList.front();
 
-#if SAVE_H264_FROM_BUFFERLIST
+#if VIDEO_SAVE_H264_FROM_BUFFERLIST
 			FILE *fpH264File = fopen("output_v2.h264", "ab+");
 
 			fwrite(sPxBuffer.lpBuffer, 1, sPxBuffer.nDataLength, fpH264File);
@@ -252,9 +267,9 @@ DWORD WINAPI ThreadWriteTest(LPVOID lp)
 
 		Sleep(2);
 
-		if (g_bStop)
+		if (g_bVideoDataFinished)
 		{
-		break;
+			break;
 		}
 	}
 
@@ -265,7 +280,7 @@ DWORD WINAPI ThreadWriteTest(LPVOID lp)
 }
 
 // TEST VIDEO
-DWORD WINAPI ThreadStart(LPVOID lp)
+DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
 {
 	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
 
@@ -380,7 +395,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 		GetDIBits(pDlg->m_hMemDC, pDlg->m_hCompatibleBitmap, 0, pDlg->m_nScreenHeight, 
 		pDlg->m_pBitmapBuffer, &pDlg->m_BitmapInfo, DIB_RGB_COLORS);*/
 
-#if TIME_ANALYZE_VIDEO
+#if VIDEO_TIME_ANALYZE
 		UINT64 ui64Start = GetCurrentTimestamp();
 #endif 
 
@@ -397,7 +412,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 				(LPBITMAPINFO) &pDlg->m_BitmapInfoHeader, 
 				DIB_RGB_COLORS);            // 获取位图数据
 
-#if TIME_ANALYZE_VIDEO
+#if VIDEO_TIME_ANALYZE
 		UINT64 ui64BMPDone = GetCurrentTimestamp();
 
 		ZeroMemory(szMsgBuffer, 1024);
@@ -407,7 +422,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 		// test unit begin #2 : 
 		// to check the capure result,
 		// save it to a bmp file
-#if SAVE_BMP
+#if VIDEO_SAVE_BMP
 		CString strCurTime = CTime::GetCurrentTime().Format("_%Y-%m-%d_%H-%M-%S");
 
 		CString strBmpFileName = ".\\" + strCurTime + ".bmp";
@@ -438,7 +453,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 			pDlg->m_nScreenHeight, 
 			pDlg->m_nScreenWidth);
 
-#if TIME_ANALYZE_VIDEO
+#if VIDEO_TIME_ANALYZE
 		UINT64 ui64YUVDone = GetCurrentTimestamp();
 
 		ZeroMemory(szMsgBuffer, 1024);
@@ -448,7 +463,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 
 		// test unit #3 begin
 		// check the yuv
-#if SAVE_YUV
+#if VIDEO_SAVE_YUV
 		FILE *fp = fopen("output.yuv", "a+");
 
 		if (fp == NULL)
@@ -472,9 +487,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 		pkt.data = NULL;    // packet data will be allocated by the encoder
 		pkt.size = 0;
 
-		//pFrame->pts = nVideoFrameCnt;
-
-		pFrame->pts= nVideoFrameCnt * (pCodecCtx->time_base.num * 1000)/(pCodecCtx->time_base.den);
+		pFrame->pts= ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;;
 
         /* encode the image */
         nRet = avcodec_encode_video2(pCodecCtx, &pkt, pFrame, &got_packet);
@@ -493,7 +506,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 				nH264BytesCount += pkt.size;
 
 				nVideoFrameCnt++;
-#if SAVE_H264
+#if VIDEO_SAVE_H264
 				FILE *fpH264File = fopen(szOutputFile, "ab+");
 
 				fwrite(pkt.data, 1, pkt.size, fpH264File);
@@ -511,7 +524,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 
 				g_qCodedBufferList.push(g_vlpBufferPool[nPos]);*/
 
-#if TIME_ANALYZE_VIDEO
+#if VIDEO_TIME_ANALYZE
 				UINT64 ui64H264Done = GetCurrentTimestamp();
 				ZeroMemory(szMsgBuffer, 1024);
 				sprintf_s(szMsgBuffer, 1024, "264: %I64u ms", ui64H264Done - ui64YUVDone);
@@ -521,7 +534,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 				//unsigned int uiTimestamp = 0;
 				
 
-#if TIME_ANALYZE_VIDEO
+#if VIDEO_TIME_ANALYZE
 				UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
 
 				ZeroMemory(szMsgBuffer, 1024);
@@ -592,7 +605,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 		{
 			printf("Flush Encoder: Succeed to encode 1 frame!\tsize:%5d\n", pkt.size);
 
-#if SAVE_H264
+#if VIDEO_SAVE_H264
 			FILE *fpH264File = fopen(szOutputFile, "ab+");
 
 			fwrite(pkt.data, 1, pkt.size, fpH264File);
@@ -613,7 +626,7 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 			gettimeofday(&tvTimestamp, NULL);
 
 
-#if TIME_ANALYZE_VIDEO
+#if VIDEO_TIME_ANALYZE
 			UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
 
 			ZeroMemory(szMsgBuffer, 1024);
@@ -641,7 +654,11 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 					nNALType = pkt.data[3] & 0x1F;
 				}
 
-				if (5 == nNALType)
+				if (5 == nNALType
+					||
+					7 == nNALType
+					||
+					8 == nNALType)
 				{
 					sTempBuffer.bVideoKeyFrame = true;
 				}
@@ -679,6 +696,8 @@ DWORD WINAPI ThreadStart(LPVOID lp)
 
 	int nH264KB = nH264BytesCount / 1024.0;
 	int nH264MB = nH264KB         / 1024.0;
+
+	g_bVideoDataFinished = true;
 
 	return 0;
 }
@@ -783,3 +802,190 @@ bool CPxScreenLiveStreamingDlg::Init()
 
 	return true;
 }
+
+// 回调函数
+/*static */DWORD CALLBACK MicrophoneCallback(  
+	HWAVEIN hWaveIn,  // 声音输入设备句柄  
+	UINT  uMsg,       // 产生的消息，由系统给出
+	DWORD dwInstance, // 在waveinopen中给出要传递给该函数的数据  
+	DWORD dwParam1,   
+	DWORD dwParam2);  
+
+bool g_bAudioCapture = false;
+HWAVEIN  hWaveIn  = NULL;
+
+DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
+{
+	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
+
+	if (g_bAudioCapture)
+	{
+		return 0;
+	}
+
+	g_bAudioCapture = true;
+
+	memset(&g_sWaveFormat,0,sizeof(WAVEFORMATEX));   
+
+	g_sWaveFormat.wFormatTag      = WAVE_FORMAT_PCM;  
+	g_sWaveFormat.nChannels       = 1;  
+	g_sWaveFormat.wBitsPerSample  = 16;  
+	g_sWaveFormat.nSamplesPerSec  = 8000L;  
+	g_sWaveFormat.nBlockAlign     = 2; 
+	g_sWaveFormat.nAvgBytesPerSec = 16000L;  
+	g_sWaveFormat.cbSize          = 0;
+
+	int nAudioSampleCount  = 0;
+	char szMsgBuffer[1024] = {0};
+
+	MMRESULT mmReturn   = 0;
+
+	//DWORD    m_ThreadID = ::GetCurrentThreadId();
+
+	BYTE *pBuffer1;//采集音频时的数据缓存
+	WAVEHDR wHdr1; //采集音频时包含数据缓存的结构体
+
+	//使用waveInOpen函数开启音频采集
+	/*HANDLE wait = CreateEvent(NULL, 0, 0, NULL);
+	mmReturn = ::waveInOpen(&hWaveIn, WAVE_MAPPER, &g_sWaveFormat, (DWORD_PTR)wait, 0L, CALLBACK_EVENT);*/
+
+	// WAVE_MAPPER，系统则会自动寻找合适设备
+
+	//mmReturn = ::waveInOpen(&hWaveIn, WAVE_MAPPER, &g_sWaveFormat, NULL, 0L, CALLBACK_NULL);
+
+	// open wavein device
+	//mmReturn = ::waveInOpen( &hWaveIn, WAVE_MAPPER, &g_sWaveFormat, m_ThreadID, NULL, CALLBACK_THREAD);
+
+	mmReturn = waveInOpen(&hWaveIn, 
+						  WAVE_MAPPER, 
+						  &g_sWaveFormat,  
+		                  (DWORD)(MicrophoneCallback), 
+						  NULL, 
+						  CALLBACK_FUNCTION); 
+
+	if(mmReturn)
+	{
+	//	//waveInErrorMsg(mmReturn, "in Start()");
+
+		OutputDebugStringA("waveInOpen Already Start()");
+
+		return 0;
+	}
+
+	//// start recording
+	//mmReturn = ::waveInStart(hWaveIn);
+
+	while (true)
+	{
+		if (g_bStop)
+		{
+			break;
+		}
+
+		// test sample count begin
+		sprintf_s(szMsgBuffer, 1024, "ThreadAudioEncoder nAudioSampleCount:%d", nAudioSampleCount);
+		OutputDebugStringA(szMsgBuffer);
+		//Sleep(1000);
+		nAudioSampleCount++;
+		// test sample count end
+
+		// 建立两个数组（这里可以建立多个数组）用来缓冲音频数据
+		DWORD bufsize = 1024*100;//每次开辟10k的缓存存储录音数据
+
+		//while (i--)//录制20左右秒声音，结合音频解码和网络传输可以修改为实时录音播放的机制以实现对讲功能
+
+		pBuffer1              = new BYTE[bufsize];
+		wHdr1.lpData          = (LPSTR)pBuffer1;
+		wHdr1.dwBufferLength  = bufsize;
+		wHdr1.dwBytesRecorded = 0;
+		wHdr1.dwUser          = 0;
+		wHdr1.dwFlags         = 0;
+		wHdr1.dwLoops         = 1;
+
+		waveInPrepareHeader(hWaveIn, &wHdr1, sizeof(WAVEHDR));//准备一个波形数据块头用于录音
+		waveInAddBuffer(hWaveIn,     &wHdr1, sizeof (WAVEHDR));//指定波形数据块为录音输入缓存
+
+		waveInStart(hWaveIn);//开始录音
+
+		Sleep(1000);//等待声音录制1s
+
+		waveInReset(hWaveIn);//停止录音
+
+#if AUDIO_SAVE_PCM
+		FILE *pf = NULL;
+
+		//fopen_s(&pf, "output.pcm", "wb");
+		fopen_s(&pf, "output.pcm", "ab");
+
+		fwrite(pBuffer1, 1, wHdr1.dwBytesRecorded, pf);
+
+		if (pf)
+		{
+			fclose(pf);
+			pf = NULL;
+		}
+#endif 
+		if (pBuffer1)
+		{
+			delete pBuffer1;   
+			pBuffer1 = NULL;
+		}
+
+		// make several input buffers and add them to the input queue
+
+		// S1: Capture the audio of outside (PCM Format)
+
+		// S2: Encode the PCM data to AAC data
+
+		// S3: Calculate the timestamp and add the buffer to BufferList
+
+	}
+
+	::waveInClose(hWaveIn);
+
+	return 0;
+}
+
+DWORD CALLBACK MicrophoneCallback(HWAVEIN hwavein, UINT uMsg, DWORD dwInstance, DWORD dwParam1, DWORD dwParam2)  
+{  
+	//这个CIMAADPCMDlg就是你的音频采集类  
+	CPxScreenLiveStreamingDlg *pWnd = (CPxScreenLiveStreamingDlg*)dwInstance;
+
+	switch(uMsg)   
+	{  
+	case WIM_OPEN:
+#if DEBUG_CAPTURE_PCM
+		OutputDebugStringA("WIM_OPEN\n"); 
+#endif 
+		break;  
+
+	case WIM_DATA: 
+#if DEBUG_CAPTURE_PCM
+		OutputDebugStringA("WIM_DATA\n"); 
+#endif
+		//这里就是对采集到的数据做处理的地方，我是做了发送处理  
+		//((PWAVEHDR)dwParam1)->lpData这就是采集到的数据指针  
+		//((PWAVEHDR)dwParam1)->dwBytesRecorded这就是采集到的数据长度  
+		//re = send(pWnd->sends,((PWAVEHDR)dwParam1)->lpData,((PWAVEHDR)dwParam1)->dwBytesRecorded,0);  
+		//处理完了之后还要再把这个缓冲数组加回去  
+		//pWnd->win代表是否继续采集，因为当停止采集的时候，只有当所有的  
+		//缓冲数组都腾出来之后才能close，所以需要停止采集时就不要再waveInAddBuffer了  
+		/*if(pWnd->win)  
+			waveInAddBuffer (hwavein, (PWAVEHDR) dwParam1, sizeof (WAVEHDR)) ;  
+		TRACE("%d\n",re); */
+
+		break;  
+
+	case WIM_CLOSE: 
+#if DEBUG_CAPTURE_PCM
+		OutputDebugStringA("WIM_CLOSE\n");  
+#endif
+
+		break;  
+
+	default:  
+		break;  
+	}  
+
+	return 0;  
+}  

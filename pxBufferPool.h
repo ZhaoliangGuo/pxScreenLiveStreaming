@@ -65,5 +65,4 @@ public:
 public:
 	int m_nBufferListLen;
 	int m_nCurPos;// 指向下一个空闲的buffer的下标
-	CRITICAL_SECTION g_csBufferPool;
 };
