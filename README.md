@@ -28,9 +28,13 @@ A record and live streaming server for windows screen.
 
 # Debug
 - 视频各阶段时间分析
+```
+#define DEBUG_VIDEO_TIME_ANALYZE 0
+```
 ![结合DebugView++分析视频各阶段耗时](https://github.com/ZhaoliangGuo/Resources/blob/master/images/time_analyze.jpg)
 
 - 音频采集麦克风开启、采集数据、关闭分析
-
-#define DEBUG_CAPTURE_PCM 1
+```
+#define DEBUG_AUDIO_CAPTURE_PCM 1
+```
 ![音频采集麦克风开启、采集数据、关闭分析](https://github.com/ZhaoliangGuo/Resources/blob/master/audio_pcm_capture_analyze.jpg)
