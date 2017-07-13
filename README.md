@@ -29,7 +29,7 @@ A record and live streaming server for windows screen.
 # Debug
 - 视频各阶段时间分析
 ```
-#define DEBUG_VIDEO_TIME_ANALYZE 0
+#define DEBUG_VIDEO_TIME_ANALYZE 1
 ```
 ![结合DebugView++分析视频各阶段耗时](https://github.com/ZhaoliangGuo/Resources/blob/master/images/time_analyze.jpg)
 
