@@ -5,11 +5,12 @@ A record and live streaming server for windows screen.
 
 # AlreadyDone
 - 采集计算机本机的画面，并将其编码为.264格式 并可保存为flv文件
+- 采集麦克风的数据并将其保存为.pcm数据
+
 - 分析视频各阶段耗时
 比如采集bmp耗时多少
 比如bmp转换为yuv耗时多少
 比如yuv编码为264耗时多超
-![结合DebugView++分析视频各阶段耗时](https://github.com/ZhaoliangGuo/Resources/blob/master/images/time_analyze.jpg)
 
 # ToDoList
 - 梳理软件的架构
@@ -24,3 +25,16 @@ A record and live streaming server for windows screen.
 - 支持http-flv输出
 - 支持hls输出
 - 支持rtmp输出
+
+# Debug
+- 视频各阶段时间分析
+```
+#define DEBUG_VIDEO_TIME_ANALYZE 1
+```
+![结合DebugView++分析视频各阶段耗时](https://github.com/ZhaoliangGuo/Resources/blob/master/images/time_analyze.jpg)
+
+- 音频采集麦克风开启、采集数据、关闭分析
+```
+#define DEBUG_AUDIO_CAPTURE_PCM 1
+```
+![音频采集麦克风开启、采集数据、关闭分析](https://github.com/ZhaoliangGuo/Resources/blob/master/audio_pcm_capture_analyze.jpg)
