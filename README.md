@@ -5,6 +5,7 @@ A record and live streaming server for windows screen.
 
 # 程序编译前的准备工作
 - 安装nasm
+
 nasm是汇编编译的工具。
 
 因为rgb转换为yuv的过程中 调用了汇编代码 
