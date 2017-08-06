@@ -6,10 +6,14 @@ A record and live streaming server for windows screen.
 # 程序编译前的准备工作
 - 安装nasm
 nasm是汇编编译的工具。
+
 因为rgb转换为yuv的过程中 调用了汇编代码 
 需要用nasm来操作汇编代码
-![nasm下载地址](http://www.nasm.us/pub/nasm/releasebuilds/2.13.01/)
+
+[nasm下载地址](http://www.nasm.us/pub/nasm/releasebuilds/2.13.01/)
+
 如果未安装nasm，会出现如下现象:
+
 ![未安装nasm时的错误现象](https://github.com/ZhaoliangGuo/Resources/blob/master/error1.png)
 
 
