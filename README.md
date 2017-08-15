@@ -4,7 +4,10 @@ A record and live streaming server for windows screen.
 用于采集计算机本机的视频和音频，支持保存为flv文件，支持rtsp/http-flv/hls/rtmp输出。
 
 # 程序编译前的准备工作
-- 安装nasm
+- 安装nasm并将路径添加到环境变量。
+```
+C:\Program Files\NASM
+```
 
 nasm是汇编编译的工具。
 
