@@ -3,6 +3,24 @@ A record and live streaming server for windows screen.
 
 用于采集计算机本机的视频和音频，支持保存为flv文件，支持rtsp/http-flv/hls/rtmp输出。
 
+# 程序编译前的准备工作
+- 安装nasm并将路径添加到环境变量。
+```
+C:\Program Files\NASM
+```
+
+nasm是汇编编译的工具。
+
+因为rgb转换为yuv的过程中 调用了汇编代码 
+需要用nasm来操作汇编代码
+
+[nasm下载地址](http://www.nasm.us/pub/nasm/releasebuilds/2.13.01/)
+
+如果未安装nasm，会出现如下现象:
+
+![未安装nasm时的错误现象](https://github.com/ZhaoliangGuo/Resources/blob/master/error1.png)
+
+
 # AlreadyDone
 - 采集计算机本机的画面，并将其编码为.264格式 并可保存为flv文件
 - 采集麦克风的数据并将其保存为.pcm数据
