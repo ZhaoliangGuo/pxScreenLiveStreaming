@@ -109,12 +109,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CPxFLVMuxer.h" />
+    <ClInclude Include="pxBufferDef.h" />
     <ClInclude Include="pxBufferPool.h" />
     <ClInclude Include="pxCommonDef.h" />
     <ClInclude Include="pxErrorDef.h" />
     <ClInclude Include="pxFLVCommonfDef.h" />
     <ClInclude Include="pxFLVGlobal.h" />
     <ClInclude Include="pxFLVRecorder.h" />
+    <ClInclude Include="pxQueueBuffer.h" />
     <ClInclude Include="pxRecordDef.h" />
     <ClInclude Include="pxScreenAudioEncoder.h" />
     <ClInclude Include="pxScreenVideoEncoder.h" />
@@ -129,6 +131,7 @@
     <ClCompile Include="pxBufferPool.cpp" />
     <ClCompile Include="pxCommonDef.cpp" />
     <ClCompile Include="pxFLVRecorder.cpp" />
+    <ClCompile Include="PxQueueBuffer.cpp" />
     <ClCompile Include="pxScreenAudioEncoder.cpp" />
     <ClCompile Include="pxScreenVideoEncoder.cpp" />
     <ClCompile Include="pxScreenLiveStreaming.cpp" />

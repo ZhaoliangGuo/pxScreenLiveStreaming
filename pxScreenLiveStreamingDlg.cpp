@@ -85,7 +85,7 @@ CPxScreenLiveStreamingDlg::CPxScreenLiveStreamingDlg(CWnd* pParent /*=NULL*/)
 
 CPxScreenLiveStreamingDlg::~CPxScreenLiveStreamingDlg()
 {
-	g_oCodedBufferPool.ReleaseBufferPool();
+	g_oCodedBufferPool.Release();
 }
 
 
@@ -136,14 +136,13 @@ BOOL CPxScreenLiveStreamingDlg::OnInitDialog()
 
 	Init();
 
-	// TODO: 在此添加额外的初始化代码
-
 	/*int nScreenWidth  = GetSystemMetrics(SM_CXSCREEN);
 	int nScreenHeight = GetSystemMetrics(SM_CYSCREEN);*/
 	int nYUVBufferSize = m_nScreenWidth * m_nScreenHeight * 1.5;
 
-	g_oYUVBufferPool.InitBufferPool(nYUVBufferSize, 100);
-	g_oCodedBufferPool.InitBufferPool(1024*1024);
+	g_oYUVBufferPool.Init(nYUVBufferSize);
+	g_oPCMBufferPool.Init(128*1024);
+	g_oCodedBufferPool.Init(1024*1024);
 
 	DWORD dwVideoCaptureThreadId;
 
@@ -245,9 +244,13 @@ DWORD WINAPI ThreadWriteTest(LPVOID lp)
 
 	while(true)
 	{
-		while (!g_qCodedBufferList.empty())
+		while (!g_oCodedQueueBuffer.IsEmpty())
 		{
-			SPxBuffer sPxBuffer = g_qCodedBufferList.front();
+			SPxBuffer sPxBuffer = g_oCodedQueueBuffer.Front();
+			/*if (NULL == psPxBuffer)
+			{
+				continue;
+			}*/
 
 #if VIDEO_SAVE_H264_FROM_BUFFERLIST
 			FILE *fpH264File = fopen("output_v2.h264", "ab+");
@@ -262,7 +265,7 @@ DWORD WINAPI ThreadWriteTest(LPVOID lp)
 #endif
 			oFLVRecorder.ReceiveVideoData(0, "127.0.0.1", &sPxBuffer);
 
-			g_qCodedBufferList.pop();
+			g_oCodedQueueBuffer.Pop();
 		}
 
 		Sleep(2);
@@ -464,17 +467,17 @@ DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
 		// test unit #3 begin
 		// check the yuv
 #if VIDEO_SAVE_YUV
-		FILE *fp = fopen("output.yuv", "a+");
+		FILE *fpYUVFile = fopen("output.yuv", "a+");
 
-		if (fp == NULL)
+		if (fpYUVFile == NULL)
 		{
-		Sleep(1000);
-		continue;
+			Sleep(1000);
+			continue;
 		}
 
-		fwrite(pDlg->m_pYUVBuffer, 1, pDlg->m_nYUVBufferSize, fp);
+		fwrite(pDlg->m_pYUVBuffer, 1, pDlg->m_nYUVBufferSize, fpYUVFile);
 
-		fclose(fp);
+		fclose(fpYUVFile);
 #endif
 		// test unit #3 end
 
@@ -577,7 +580,12 @@ DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
 
 				int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
 				g_oCodedBufferPool.SetBufferAt(nPos, &sTempBuffer);
-				g_qCodedBufferList.push(g_vCodedBufferPool[nPos]);
+
+				SPxBuffer *psPxBuffer = g_oCodedBufferPool.GetBufferAt(nPos);
+				if (NULL != psPxBuffer)
+				{
+					g_oCodedQueueBuffer.Push(psPxBuffer);
+				}
 
 				av_free_packet(&pkt);
 			}  
@@ -675,7 +683,13 @@ DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
 
 			int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
 			g_oCodedBufferPool.SetBufferAt(nPos, &sTempBuffer);
-			g_qCodedBufferList.push(g_vCodedBufferPool[nPos]);
+			//g_qCodedBufferList.push(g_vCodedBufferPool[nPos]);
+
+			SPxBuffer *psPxBuffer = g_oCodedBufferPool.GetBufferAt(nPos);
+			if (NULL != psPxBuffer)
+			{
+				g_oCodedQueueBuffer.Push(psPxBuffer);
+			}
 
 			av_free_packet(&pkt);	
 
@@ -818,21 +832,30 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 {
 	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
 
-	if (g_bAudioCapture)
+	/*if (g_bAudioCapture)
 	{
-		return 0;
+	return 0;
 	}
 
-	g_bAudioCapture = true;
+	g_bAudioCapture = true;*/
+
+// Audio Capture
+/////////////////////////////////////////////////////////////////////////////////
 
 	memset(&g_sWaveFormat,0,sizeof(WAVEFORMATEX));   
 
 	g_sWaveFormat.wFormatTag      = WAVE_FORMAT_PCM;  
 	g_sWaveFormat.nChannels       = 1;  
 	g_sWaveFormat.wBitsPerSample  = 16;  
-	g_sWaveFormat.nSamplesPerSec  = 8000L;  
-	g_sWaveFormat.nBlockAlign     = 2; 
-	g_sWaveFormat.nAvgBytesPerSec = 16000L;  
+	g_sWaveFormat.nSamplesPerSec  = 44100L;
+
+	/*
+	 If wFormatTag = WAVE_FORMAT_PCM, 
+	 set nBlockAlign to (nChannels*wBitsPerSample)/8, 
+	 which is the size of a single audio frame.
+	*/
+	g_sWaveFormat.nBlockAlign     = g_sWaveFormat.nChannels * g_sWaveFormat.wBitsPerSample / 8; 
+	g_sWaveFormat.nAvgBytesPerSec = 88200;  
 	g_sWaveFormat.cbSize          = 0;
 
 	int nAudioSampleCount  = 0;
@@ -872,8 +895,98 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 		return 0;
 	}
 
+/////////////////////////////////////////////////////////////////////////////////
+
+// Audio Encoder
+/////////////////////////////////////////////////////////////////////////////////
+	AVCodec *pCodec;
+	AVCodecContext *pCodecCtx= NULL;
+	int ret, got_output;
+	//FILE *fp_in;
+
+	AVFrame *pFrame;
+	uint8_t* frame_buf;
+	int size=0;
+
+	AVPacket pkt;
+	int y_size;
+	int framecnt=0;
+
+	//char filename_in[]="tdjm.pcm";
+
+	//char filename_in[]="output.pcm";
+
+	AVCodecID codec_id=AV_CODEC_ID_AAC;
+	//char filename_out[]="tdjm.aac";
+
+	char filename_out[]="output.aac";
+
+	int framenum=1000;	
+
+	avcodec_register_all();
+
+	pCodec = avcodec_find_encoder(codec_id);
+	if (!pCodec) {
+		printf("Codec not found\n");
+		return -1;
+	}
+	pCodecCtx = avcodec_alloc_context3(pCodec);
+	if (!pCodecCtx) {
+		printf("Could not allocate video codec context\n");
+		return -1;
+	}
+
+	pCodecCtx->codec_id   = codec_id;
+	pCodecCtx->codec_type = AVMEDIA_TYPE_AUDIO;
+	pCodecCtx->sample_fmt = AV_SAMPLE_FMT_S16;
+	//pCodecCtx->sample_fmt = AV_SAMPLE_FMT_FLTP;
+	pCodecCtx->sample_rate= 44100;
+	//pCodecCtx->channel_layout=AV_CH_LAYOUT_STEREO;
+	pCodecCtx->channel_layout=AV_CH_LAYOUT_MONO;
+	pCodecCtx->channels = av_get_channel_layout_nb_channels(pCodecCtx->channel_layout);
+	pCodecCtx->bit_rate = 32000;  
+
+	if (avcodec_open2(pCodecCtx, pCodec, NULL) < 0) 
+	{
+		printf("Could not open codec\n");
+
+		return -1;
+	}
+
+	pFrame             = av_frame_alloc();
+	pFrame->nb_samples = pCodecCtx->frame_size;
+	pFrame->format     = pCodecCtx->sample_fmt;
+
+	size = av_samples_get_buffer_size(NULL, 
+									  pCodecCtx->channels,
+									  pCodecCtx->frame_size,
+									  pCodecCtx->sample_fmt, 
+									  1);
+
+	frame_buf = (uint8_t *)av_malloc(size);
+	avcodec_fill_audio_frame(pFrame, 
+						     pCodecCtx->channels, 
+							 pCodecCtx->sample_fmt,
+							 (const uint8_t*)frame_buf, 
+							 size, 
+							 1);
+
+/////////////////////////////////////////////////////////////////////////////////
+	
 	//// start recording
 	//mmReturn = ::waveInStart(hWaveIn);
+
+    #define AUDIO_BUF_SIZE (1024*512)
+
+	DWORD bufsize = AUDIO_BUF_SIZE;//每次开辟10k的缓存存储录音数据
+
+	//while (i--)//录制20左右秒声音，结合音频解码和网络传输可以修改为实时录音播放的机制以实现对讲功能
+
+	pBuffer1              = new BYTE[AUDIO_BUF_SIZE];
+
+    #define TEMP_BUFFER_LEN (1024*4)
+	char szTempBuffer[TEMP_BUFFER_LEN] = {0};
+	int nLeastDataLen = 0;
 
 	while (true)
 	{
@@ -883,18 +996,16 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 		}
 
 		// test sample count begin
-		sprintf_s(szMsgBuffer, 1024, "ThreadAudioEncoder nAudioSampleCount:%d", nAudioSampleCount);
+		sprintf_s(szMsgBuffer, 1024, "ThreadAudioEncoder nAudioSampleCount:%d\n", nAudioSampleCount);
 		OutputDebugStringA(szMsgBuffer);
 		//Sleep(1000);
 		nAudioSampleCount++;
 		// test sample count end
 
 		// 建立两个数组（这里可以建立多个数组）用来缓冲音频数据
-		DWORD bufsize = 1024*100;//每次开辟10k的缓存存储录音数据
 
-		//while (i--)//录制20左右秒声音，结合音频解码和网络传输可以修改为实时录音播放的机制以实现对讲功能
+		ZeroMemory(pBuffer1, AUDIO_BUF_SIZE);
 
-		pBuffer1              = new BYTE[bufsize];
 		wHdr1.lpData          = (LPSTR)pBuffer1;
 		wHdr1.dwBufferLength  = bufsize;
 		wHdr1.dwBytesRecorded = 0;
@@ -903,7 +1014,7 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 		wHdr1.dwLoops         = 1;
 
 		waveInPrepareHeader(hWaveIn, &wHdr1, sizeof(WAVEHDR));//准备一个波形数据块头用于录音
-		waveInAddBuffer(hWaveIn,     &wHdr1, sizeof (WAVEHDR));//指定波形数据块为录音输入缓存
+		waveInAddBuffer(hWaveIn,     &wHdr1, sizeof(WAVEHDR));//指定波形数据块为录音输入缓存
 
 		waveInStart(hWaveIn);//开始录音
 
@@ -919,27 +1030,169 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 
 		fwrite(pBuffer1, 1, wHdr1.dwBytesRecorded, pf);
 
+		ZeroMemory(szMsgBuffer, 1024);
+		sprintf_s(szMsgBuffer, 1024, "dwBytesRecorded:%lu\n", wHdr1.dwBytesRecorded);
+		OutputDebugStringA(szMsgBuffer);
+
 		if (pf)
 		{
 			fclose(pf);
 			pf = NULL;
 		}
-#endif 
-		if (pBuffer1)
+#endif
+
+		FILE *fp = fopen(".\\output.txt", "a+");
+		if (NULL != fp)
 		{
-			delete pBuffer1;   
-			pBuffer1 = NULL;
+			fprintf_s(fp, "wHdr1.dwBytesRecorded: %lu Bytes\n", wHdr1.dwBytesRecorded);
+			fclose(fp);
+			fp = NULL;
 		}
 
+		//framenum = wHdr1.dwBytesRecorded / size;
+#if 1
+		int nCurPos = 0;
+
+		//Encode
+		for (nCurPos = 0; nCurPos < wHdr1.dwBytesRecorded; ) 
+		{
+			if (nCurPos + size > wHdr1.dwBytesRecorded)
+			{
+				break;
+			}
+
+			av_init_packet(&pkt);
+			pkt.data = NULL;    // packet data will be allocated by the encoder
+			pkt.size = 0;
+
+			char szMsgBuffer[1024] = {0};
+
+			if (0 == nLeastDataLen)
+			{
+				memcpy(frame_buf, pBuffer1 + nCurPos, size);
+				nCurPos += size;
+
+				ZeroMemory(szMsgBuffer, 1024);
+				sprintf_s(szMsgBuffer, 1024, "size: %d", size);
+			}
+			else
+			{
+				memcpy(frame_buf, szTempBuffer, nLeastDataLen);
+				int nLen = size - nLeastDataLen;
+
+				memcpy(frame_buf, pBuffer1 + nCurPos, nLen);
+				nCurPos += nLen;
+
+				ZeroMemory(szMsgBuffer, 1024);
+				sprintf_s(szMsgBuffer, 1024, "nLeastDataLen: %d; nLen:%d", nLeastDataLen, nLen);
+
+				nLeastDataLen = 0;
+				ZeroMemory(szTempBuffer, TEMP_BUFFER_LEN);
+			}
+
+			OutputDebugStringA(szMsgBuffer);
+
+			//Read raw data
+			/*if (fread(frame_buf, 1, size, fp_in) <= 0)
+			{
+				printf("Failed to read raw data! \n");
+				return -1;
+			}
+			else if(feof(fp_in))
+			{
+				break;
+			}*/
+
+			//pFrame->pts = i;
+			ret = avcodec_encode_audio2(pCodecCtx, &pkt, pFrame, &got_output);
+			if (ret < 0) 
+			{
+				printf("Error encoding frame\n");
+				return -1;
+			}
+
+			if (got_output) 
+			{
+				printf("Succeed to encode frame: %5d\tsize:%5d\n",framecnt,pkt.size);
+				framecnt++;
+
+				FILE *fp_out = fopen(filename_out, "ab");
+				if (fp_out)
+				{
+					fwrite(pkt.data, 1, pkt.size, fp_out);
+
+					fclose(fp_out);
+					fp_out = NULL;
+				}
+
+				av_free_packet(&pkt);
+			}
+		}
+
+		nLeastDataLen = wHdr1.dwBytesRecorded - nCurPos - 1;
+		if (nLeastDataLen > 0)
+		{
+			ZeroMemory(szTempBuffer, TEMP_BUFFER_LEN);
+			memcpy(szTempBuffer, pBuffer1+nCurPos, nLeastDataLen);
+
+			ZeroMemory(szMsgBuffer, 1024);
+			sprintf_s(szMsgBuffer, 1024, "nLeastDataLen: %d. Add it to temp buffer", nLeastDataLen);
+			OutputDebugStringA(szMsgBuffer);
+		}
+#endif
 		// make several input buffers and add them to the input queue
 
-		// S1: Capture the audio of outside (PCM Format)
+		// S1: Capture the audio of microphone (PCM Format) and get the timeval (to calculate the timestamp)
 
 		// S2: Encode the PCM data to AAC data
 
 		// S3: Calculate the timestamp and add the buffer to BufferList
 
 	}
+
+#if 0
+	int i = 0;
+	//Flush Encoder
+	for (got_output = 1; got_output; i++) 
+	{
+		ret = avcodec_encode_audio2(pCodecCtx, &pkt, NULL, &got_output);
+		if (ret < 0) 
+		{
+			printf("Error encoding frame\n");
+			return -1;
+		}
+
+		if (got_output) 
+		{
+			printf("Flush Encoder: Succeed to encode 1 frame!\tsize:%5d\n",pkt.size);
+
+			FILE *fp_out = fopen(filename_out, "ab");
+			if (fp_out)
+			{
+				fwrite(pkt.data, 1, pkt.size, fp_out);
+
+				fclose(fp_out);
+				fp_out = NULL;
+			}
+
+			av_free_packet(&pkt);
+		}
+	}
+#endif 
+
+	if (pBuffer1)
+	{
+		delete pBuffer1;   
+		pBuffer1 = NULL;
+	}
+
+	//fclose(fp_out);
+	avcodec_close(pCodecCtx);
+	av_free(pCodecCtx);
+	av_freep(&pFrame->data[0]);
+	av_frame_free(&pFrame);
+
+	//av_free(frame_buf);
 
 	::waveInClose(hWaveIn);
 
