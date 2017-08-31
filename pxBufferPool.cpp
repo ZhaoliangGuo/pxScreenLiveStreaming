@@ -3,25 +3,21 @@
 #include <vector>
 using namespace std;
 
-extern vector <SPxBuffer> g_vCodedBufferPool;
-extern CRITICAL_SECTION   g_csBufferPool;
-
-SPxBufferPool::SPxBufferPool(void)
+CPxBufferPool::CPxBufferPool(void)
 {
-	::InitializeCriticalSection(&g_csBufferPool); 
+	::InitializeCriticalSection(&m_csRingBuffer); 
 	m_nCurPos = 0;
 }
 
-
-SPxBufferPool::~SPxBufferPool(void)
+CPxBufferPool::~CPxBufferPool(void)
 {
-	::DeleteCriticalSection(&g_csBufferPool);    //释放里临界区
+	::DeleteCriticalSection(&m_csRingBuffer);    //释放里临界区
 	m_nCurPos = 0;
 }
 
-int SPxBufferPool::InitBufferPool(int in_nBufferSize, int in_nBufferPoolLen)
+int CPxBufferPool::Init(int in_nBufferSize, int in_nBufferPoolLen)
 {
-	::EnterCriticalSection(&g_csBufferPool); 
+	::EnterCriticalSection(&m_csRingBuffer); 
 
 	SPxBuffer sPxBuffer;
 	
@@ -40,83 +36,87 @@ int SPxBufferPool::InitBufferPool(int in_nBufferSize, int in_nBufferPoolLen)
 			break;
 		}
 
-		g_vCodedBufferPool.push_back(sPxBuffer);
+		m_vRingBuffer.push_back(sPxBuffer);
 	}
 
-	m_nBufferListLen = g_vCodedBufferPool.size();
+	m_nBufferListLen = m_vRingBuffer.size();
 
-	::LeaveCriticalSection(&g_csBufferPool);  
+	::LeaveCriticalSection(&m_csRingBuffer);  
 
-	return g_vCodedBufferPool.size();
+	return m_vRingBuffer.size();
 }
 
-void SPxBufferPool::ReleaseBufferPool()
+void CPxBufferPool::Release()
 {
-	::EnterCriticalSection(&g_csBufferPool);
+	::EnterCriticalSection(&m_csRingBuffer);
 	SPxBuffer sPxBuffer;
 
-	while (!g_vCodedBufferPool.empty())
+	while (!m_vRingBuffer.empty())
 	{
-		sPxBuffer = g_vCodedBufferPool.back();
+		sPxBuffer = m_vRingBuffer.back();
 		VirtualFree(sPxBuffer.lpBuffer, 0, MEM_RELEASE);
 		sPxBuffer.lpBuffer = NULL;
 
-		g_vCodedBufferPool.pop_back();
+		m_vRingBuffer.pop_back();
 	}
 
-	::LeaveCriticalSection(&g_csBufferPool);  
+	::LeaveCriticalSection(&m_csRingBuffer);  
 }
 
-int SPxBufferPool::GetEmptyBufferPos()
+int CPxBufferPool::GetEmptyBufferPos()
 {
-	::EnterCriticalSection(&g_csBufferPool);
+	::EnterCriticalSection(&m_csRingBuffer);
 
 	int nPos = 0;
 
 	// 环形内存
-	if (DEFAULT_BUFFER_LIST_LEN == m_nCurPos)
+	if ((m_nBufferListLen - 1) == m_nCurPos)
 	{
 		m_nCurPos = 0;
 
 		nPos = m_nCurPos;
 
+		::LeaveCriticalSection(&m_csRingBuffer); 
+
 		return nPos;
 	}
 
 	nPos = m_nCurPos;
+
 	m_nCurPos++;
 
-	::LeaveCriticalSection(&g_csBufferPool); 
+	::LeaveCriticalSection(&m_csRingBuffer); 
 
 	return nPos;
 }
 
-void SPxBufferPool::SetBufferAt(int in_nPos, 
-								SPxBuffer *in_psBuffer )
+void CPxBufferPool::SetBufferAt(int in_nPos, SPxBuffer *in_psBuffer )
 {
-	::EnterCriticalSection(&g_csBufferPool);
+	::EnterCriticalSection(&m_csRingBuffer);
 
-	g_vCodedBufferPool[in_nPos].eMediaType     = in_psBuffer->eMediaType;
-	memcpy(g_vCodedBufferPool[in_nPos].lpBuffer, in_psBuffer->lpBuffer, in_psBuffer->nDataLength);
-	g_vCodedBufferPool[in_nPos].nDataLength    = in_psBuffer->nDataLength;
-	g_vCodedBufferPool[in_nPos].tvTimestamp    = in_psBuffer->tvTimestamp;
-	g_vCodedBufferPool[in_nPos].bVideoKeyFrame = in_psBuffer->bVideoKeyFrame;
+	m_vRingBuffer[in_nPos].eMediaType     = in_psBuffer->eMediaType;
+	memcpy(m_vRingBuffer[in_nPos].lpBuffer, in_psBuffer->lpBuffer, in_psBuffer->nDataLength);
+	m_vRingBuffer[in_nPos].nDataLength    = in_psBuffer->nDataLength;
+	m_vRingBuffer[in_nPos].tvTimestamp    = in_psBuffer->tvTimestamp;
+	m_vRingBuffer[in_nPos].bVideoKeyFrame = in_psBuffer->bVideoKeyFrame;
 
-	::LeaveCriticalSection(&g_csBufferPool); 
+	::LeaveCriticalSection(&m_csRingBuffer); 
 }
 
-//void SPxBufferPool::SetBufferAt(int in_nPos, 
-//	EPxMediaType in_keMediaType, 
-//	uint8_t *in_ui8Data, 
-//	int in_nDataLength, 
-//	timeval in_tvTimestamp )
-//{
-//	::EnterCriticalSection(&g_csBufferPool);
-//
-//	g_vCodedBufferPool[in_nPos].eMediaType  = in_keMediaType;
-//	memcpy(g_vCodedBufferPool[in_nPos].lpBuffer, in_ui8Data, in_nDataLength);
-//	g_vCodedBufferPool[in_nPos].nDataLength = in_nDataLength;
-//	g_vCodedBufferPool[in_nPos].tvTimestamp = in_tvTimestamp;
-//
-//	::LeaveCriticalSection(&g_csBufferPool); 
-//}
+SPxBuffer *CPxBufferPool::GetBufferAt(int in_nPos)
+{
+	::EnterCriticalSection(&m_csRingBuffer);
+
+	if (kePxMediaType_Invalid == m_vRingBuffer[in_nPos].bVideoKeyFrame)
+	{
+		::LeaveCriticalSection(&m_csRingBuffer);
+
+		return NULL;
+	}
+
+	SPxBuffer *psPxBuffer = &m_vRingBuffer[in_nPos];
+
+	::LeaveCriticalSection(&m_csRingBuffer);
+
+	return psPxBuffer;
+}

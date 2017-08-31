@@ -7,33 +7,36 @@ using namespace std;
 
 #include "Windows.h"
 #include "pxBufferPool.h"
+#include "pxQueueBuffer.h"
 #include "pxErrorDef.h"
+#include "pxBufferDef.h"
+
 
 // 音频采集
 #include <mmsystem.h>
 
 // 定义内存池
-extern struct SPxBuffer;
 
 // YUV
-extern vector <SPxBuffer> g_vYUVBufferPool; // YUV内存池
-extern queue  <SPxBuffer> g_qYUVBufferList; // 存储采集的YUV数据
-extern SPxBufferPool      g_oYUVBufferPool;
+extern CPxBufferPool      g_oYUVBufferPool;      // YUV内存池
+extern CPxQueueBuffer     g_oYUVQueueBuffer; // 存储采集的YUV数据
+
+// PCM
+extern CPxBufferPool      g_oPCMBufferPool;      // PCM内存池
+extern CPxQueueBuffer     g_oPCMQueueBuffer; // 存储采集的PCM数据
 
 // H.264/AAC
-extern vector <SPxBuffer> g_vCodedBufferPool; // 存储编码后数据的内存池(H.264/AAC)
-extern SPxBufferPool      g_oCodedBufferPool;
-extern queue <SPxBuffer>  g_qCodedBufferList; // 存储编码后数据的队列
-extern CRITICAL_SECTION   g_csBufferPool;
+extern CPxBufferPool      g_oCodedBufferPool;    // 存储编码后数据的内存池(H.264/AAC)
+extern CPxQueueBuffer     g_oCodedQueueBuffer;   // 存储编码后数据的队列
 
 extern int gettimeofday(struct timeval*, int*);
 
 extern UINT64 GetCurrentTimestamp();
 
 #define VIDEO_SAVE_BMP  0
-#define VIDEO_SAVE_YUV  0
-#define VIDEO_SAVE_H264 0
-#define VIDEO_SAVE_H264_FROM_BUFFERLIST 0
+#define VIDEO_SAVE_YUV  1
+#define VIDEO_SAVE_H264 1
+#define VIDEO_SAVE_H264_FROM_BUFFERLIST 1
 #define DEBUG_VIDEO_TIME_ANALYZE 0
 
 #define DEBUG_AUDIO_CAPTURE_PCM 1

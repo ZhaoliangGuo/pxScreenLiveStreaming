@@ -2,14 +2,26 @@
 #include <time.h>
 #include <stdio.h>
 
-vector <SPxBuffer> g_vYUVBufferPool; // YUV内存池
-queue  <SPxBuffer> g_qYUVBufferList; // 存储采集的YUV数据
-SPxBufferPool      g_oYUVBufferPool;
+//CPxBufferPool      g_oYUVBufferPool; // YUV内存池
+//queue  <SPxBuffer> g_qYUVBufferList; // 存储采集的YUV数据
+//
+//CPxBufferPool      g_oPCMBufferPool; // PCM内存池
+//queue  <SPxBuffer> g_qPCMBufferPool; // 存储采集的PCM数据
+//
+//CPxBufferPool      g_oCodedBufferPool;
+//queue <SPxBuffer>  g_qCodedBufferList;
 
-vector <SPxBuffer> g_vCodedBufferPool;
-SPxBufferPool      g_oCodedBufferPool;
-queue <SPxBuffer>  g_qCodedBufferList;
-CRITICAL_SECTION   g_csBufferPool;
+// YUV
+CPxBufferPool      g_oYUVBufferPool;      // YUV内存池
+CPxQueueBuffer     g_oYUVQueueBuffer; // 存储采集的YUV数据
+
+// PCM
+CPxBufferPool      g_oPCMBufferPool;      // PCM内存池
+CPxQueueBuffer     g_oPCMQueueBuffer; // 存储采集的PCM数据
+
+// H.264/AAC
+CPxBufferPool      g_oCodedBufferPool;    // 存储编码后数据的内存池(H.264/AAC)
+CPxQueueBuffer     g_oCodedQueueBuffer;    // 存储编码后数据的队列
 
 // used to make sure that static variables in gettimeofday() aren't initialized simultaneously by multiple threads
 #define _WIN32_WCE (1)
