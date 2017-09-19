@@ -20,6 +20,7 @@ public:
 	int        GetEmptyBufferPos();
 	void       SetBufferAt(int in_nPos, SPxBuffer *in_psBuffer );
 	SPxBuffer *GetBufferAt(int in_nPos);
+	int        GetBufferSize();
 
 private:
 	vector <SPxBuffer> m_vRingBuffer;
@@ -27,4 +28,6 @@ private:
 
 	int m_nBufferListLen;
 	int m_nCurPos;// 指向下一个空闲的buffer的下标
+
+	int m_nBufferSize; // 内存池中每块内存的大小
 };

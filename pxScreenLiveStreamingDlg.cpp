@@ -29,6 +29,8 @@ extern "C"
 DWORD WINAPI ThreadVideoEncoder(LPVOID lp);
 DWORD WINAPI ThreadVideoCaptureTest(LPVOID lp);
 DWORD WINAPI ThreadWriteTest(LPVOID lp);
+
+DWORD WINAPI ThreadAudioCapture(LPVOID lp);
 DWORD WINAPI ThreadAudioEncoder(LPVOID lp);
 
 void CALLBACK waveInProc( 
@@ -141,8 +143,9 @@ BOOL CPxScreenLiveStreamingDlg::OnInitDialog()
 	int nYUVBufferSize = m_nScreenWidth * m_nScreenHeight * 1.5;
 
 	g_oYUVBufferPool.Init(nYUVBufferSize);
-	g_oPCMBufferPool.Init(128*1024);
+	g_oPCMBufferPool.Init(512*1024);
 	g_oCodedBufferPool.Init(1024*1024);
+
 
 	DWORD dwVideoCaptureThreadId;
 
@@ -214,13 +217,13 @@ void CPxScreenLiveStreamingDlg::OnBnClickedButtonStart()
 	g_bVideoDataFinished = false;
 
 	DWORD dwVideoThreadId;
-
 	HANDLE hThread = CreateThread(NULL, NULL, ThreadVideoEncoder, this, 0, &dwVideoThreadId);
 
-	DWORD dwAudioThreadId;
-	HANDLE hAudioEncodeThread = CreateThread(NULL, NULL, ThreadAudioEncoder, this, 0, &dwAudioThreadId);
+	DWORD dwAudioCaptureThreadId;
+	DWORD dwAudioEncoderThreadId;
+	HANDLE hAudioCaptureThread = CreateThread(NULL, NULL, ThreadAudioCapture, this, 0, &dwAudioCaptureThreadId);
+	HANDLE hAudioEncodeThread  = CreateThread(NULL, NULL, ThreadAudioEncoder, this, 0, &dwAudioEncoderThreadId);
 }
-
 
 void CPxScreenLiveStreamingDlg::OnBnClickedButtonStop()
 {
@@ -246,16 +249,18 @@ DWORD WINAPI ThreadWriteTest(LPVOID lp)
 	{
 		while (!g_oCodedQueueBuffer.IsEmpty())
 		{
-			SPxBuffer sPxBuffer = g_oCodedQueueBuffer.Front();
-			/*if (NULL == psPxBuffer)
+			SPxBuffer *psPxBuffer = g_oCodedQueueBuffer.Front();
+			if (NULL == psPxBuffer->lpBuffer)
 			{
+				Sleep(2);
+
 				continue;
-			}*/
+			}
 
 #if VIDEO_SAVE_H264_FROM_BUFFERLIST
 			FILE *fpH264File = fopen("output_v2.h264", "ab+");
 
-			fwrite(sPxBuffer.lpBuffer, 1, sPxBuffer.nDataLength, fpH264File);
+			fwrite(psPxBuffer->lpBuffer, 1, psPxBuffer->nDataLength, fpH264File);
 
 			if (fpH264File)
 			{
@@ -263,7 +268,7 @@ DWORD WINAPI ThreadWriteTest(LPVOID lp)
 				fpH264File = NULL;
 			}
 #endif
-			oFLVRecorder.ReceiveVideoData(0, "127.0.0.1", &sPxBuffer);
+			oFLVRecorder.ReceiveVideoData(0, "127.0.0.1", psPxBuffer);
 
 			g_oCodedQueueBuffer.Pop();
 		}
@@ -825,22 +830,12 @@ bool CPxScreenLiveStreamingDlg::Init()
 	DWORD dwParam1,   
 	DWORD dwParam2);  
 
-bool g_bAudioCapture = false;
-HWAVEIN  hWaveIn  = NULL;
 
-DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
+DWORD WINAPI ThreadAudioCapture(LPVOID lp)
 {
 	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
 
-	/*if (g_bAudioCapture)
-	{
-	return 0;
-	}
-
-	g_bAudioCapture = true;*/
-
-// Audio Capture
-/////////////////////////////////////////////////////////////////////////////////
+	HWAVEIN  hWaveIn  = NULL;
 
 	memset(&g_sWaveFormat,0,sizeof(WAVEFORMATEX));   
 
@@ -863,9 +858,8 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 
 	MMRESULT mmReturn   = 0;
 
-	//DWORD    m_ThreadID = ::GetCurrentThreadId();
+	//DWORD    mThreadID = ::GetCurrentThreadId();
 
-	BYTE *pBuffer1;//采集音频时的数据缓存
 	WAVEHDR wHdr1; //采集音频时包含数据缓存的结构体
 
 	//使用waveInOpen函数开启音频采集
@@ -873,7 +867,6 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 	mmReturn = ::waveInOpen(&hWaveIn, WAVE_MAPPER, &g_sWaveFormat, (DWORD_PTR)wait, 0L, CALLBACK_EVENT);*/
 
 	// WAVE_MAPPER，系统则会自动寻找合适设备
-
 	//mmReturn = ::waveInOpen(&hWaveIn, WAVE_MAPPER, &g_sWaveFormat, NULL, 0L, CALLBACK_NULL);
 
 	// open wavein device
@@ -888,17 +881,118 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 
 	if(mmReturn)
 	{
-	//	//waveInErrorMsg(mmReturn, "in Start()");
-
 		OutputDebugStringA("waveInOpen Already Start()");
-
 		return 0;
 	}
 
+	SPxBuffer *psPCMBuffer = NULL; 
+
+	while (true)
+	{
+		if (g_bStop)
+		{
+			break;
+		}
+
+		// test sample count begin
+		sprintf_s(szMsgBuffer, 1024, "ThreadAudioEncoder nAudioSampleCount:%d\n", nAudioSampleCount);
+		OutputDebugStringA(szMsgBuffer);
+
+		//Sleep(1000);
+		nAudioSampleCount++;
+		// test sample count end
+
+		// 建立两个数组（这里可以建立多个数组）用来缓冲音频数据
+
+		psPCMBuffer = g_oPCMBufferPool.GetBufferAt(g_oPCMBufferPool.GetEmptyBufferPos());
+		psPCMBuffer->eMediaType = kePxMediaType_Audio;
+
+		wHdr1.lpData          = (LPSTR)psPCMBuffer->lpBuffer;
+		wHdr1.dwBufferLength  = g_oPCMBufferPool.GetBufferSize();
+		wHdr1.dwBytesRecorded = 0;
+		wHdr1.dwUser          = 0;
+		wHdr1.dwFlags         = 0;
+		wHdr1.dwLoops         = 1;
+
+		waveInPrepareHeader(hWaveIn, &wHdr1, sizeof(WAVEHDR));//准备一个波形数据块头用于录音
+		waveInAddBuffer(hWaveIn,     &wHdr1, sizeof(WAVEHDR));//指定波形数据块为录音输入缓存
+
+		waveInStart(hWaveIn);//开始录音
+
+		Sleep(1000);//等待声音录制1s
+
+		waveInReset(hWaveIn);//停止录音
+
+		psPCMBuffer->nDataLength = wHdr1.dwBytesRecorded;
+		gettimeofday(&psPCMBuffer->tvTimestamp, NULL);
+
+		g_oPCMQueueBuffer.Push(psPCMBuffer);
+
+#if AUDIO_SAVE_PCM
+		FILE *pf = NULL;
+
+		//fopen_s(&pf, "output.pcm", "wb");
+		fopen_s(&pf, "output.pcm", "ab");
+
+		fwrite(psPCMBuffer->lpBuffer, 1, wHdr1.dwBytesRecorded, pf);
+
+		ZeroMemory(szMsgBuffer, 1024);
+		sprintf_s(szMsgBuffer, 1024, "dwBytesRecorded:%lu\n", wHdr1.dwBytesRecorded);
+		OutputDebugStringA(szMsgBuffer);
+
+		if (pf)
+		{
+			fclose(pf);
+			pf = NULL;
+		}
+#endif
+	}
+
+	::waveInClose(hWaveIn);
+
+	return 0;
+}
+
+DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
+{
+	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
+
+// Audio Capture
 /////////////////////////////////////////////////////////////////////////////////
+	while (true)
+	{
+		while (!g_oPCMQueueBuffer.IsEmpty())
+		{
+			SPxBuffer *psPxBuffer = g_oPCMQueueBuffer.Front();
+			if (NULL == psPxBuffer->lpBuffer)
+			{
+				Sleep(2);
+
+				continue;
+			}
+
+#if AUDIO_SAVE_PCM_FROM_BUFFERLIST
+			FILE *fpPCMFile = fopen("output_v2.pcm", "ab+");
+
+			fwrite(psPxBuffer->lpBuffer, 1, psPxBuffer->nDataLength, fpPCMFile);
+
+			if (fpPCMFile)
+			{
+				fclose(fpPCMFile);
+				fpPCMFile = NULL;
+			}
+#endif
+
+			g_oPCMQueueBuffer.Pop();
+		}
+
+		Sleep(2);
+	}
 
 // Audio Encoder
 /////////////////////////////////////////////////////////////////////////////////
+
+#if 0
 	AVCodec *pCodec;
 	AVCodecContext *pCodecCtx= NULL;
 	int ret, got_output;
@@ -912,24 +1006,21 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 	int y_size;
 	int framecnt=0;
 
-	//char filename_in[]="tdjm.pcm";
-
-	//char filename_in[]="output.pcm";
-
 	AVCodecID codec_id=AV_CODEC_ID_AAC;
-	//char filename_out[]="tdjm.aac";
 
 	char filename_out[]="output.aac";
 
-	int framenum=1000;	
+	int framenum = 1000;	
 
 	avcodec_register_all();
 
 	pCodec = avcodec_find_encoder(codec_id);
-	if (!pCodec) {
+	if (!pCodec) 
+	{
 		printf("Codec not found\n");
 		return -1;
 	}
+
 	pCodecCtx = avcodec_alloc_context3(pCodec);
 	if (!pCodecCtx) {
 		printf("Could not allocate video codec context\n");
@@ -971,175 +1062,58 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 							 size, 
 							 1);
 
-/////////////////////////////////////////////////////////////////////////////////
-	
-	//// start recording
-	//mmReturn = ::waveInStart(hWaveIn);
-
-    #define AUDIO_BUF_SIZE (1024*512)
-
-	DWORD bufsize = AUDIO_BUF_SIZE;//每次开辟10k的缓存存储录音数据
-
-	//while (i--)//录制20左右秒声音，结合音频解码和网络传输可以修改为实时录音播放的机制以实现对讲功能
-
-	pBuffer1              = new BYTE[AUDIO_BUF_SIZE];
-
     #define TEMP_BUFFER_LEN (1024*4)
 	char szTempBuffer[TEMP_BUFFER_LEN] = {0};
 	int nLeastDataLen = 0;
 
-	while (true)
+	av_init_packet(&pkt);
+	pkt.data = NULL;    // packet data will be allocated by the encoder
+	pkt.size = 0;
+
+	char szMsgBuffer[1024] = {0};
+
+	//memcpy(frame_buf, pBuffer1 + nCurPos, size);
+
+	ZeroMemory(szMsgBuffer, 1024);
+	sprintf_s(szMsgBuffer, 1024, "size: %d", size);
+	
+
+	OutputDebugStringA(szMsgBuffer);
+
+	//Read raw data
+	/*if (fread(frame_buf, 1, size, fp_in) <= 0)
 	{
-		if (g_bStop)
+		printf("Failed to read raw data! \n");
+		return -1;
+	}
+	else if(feof(fp_in))
+	{
+		break;
+	}*/
+
+	//pFrame->pts = i;
+	ret = avcodec_encode_audio2(pCodecCtx, &pkt, pFrame, &got_output);
+	if (ret < 0) 
+	{
+		printf("Error encoding frame\n");
+		return -1;
+	}
+
+	if (got_output) 
+	{
+		printf("Succeed to encode frame: %5d\tsize:%5d\n",framecnt,pkt.size);
+		framecnt++;
+
+		FILE *fp_out = fopen(filename_out, "ab");
+		if (fp_out)
 		{
-			break;
+			fwrite(pkt.data, 1, pkt.size, fp_out);
+
+			fclose(fp_out);
+			fp_out = NULL;
 		}
 
-		// test sample count begin
-		sprintf_s(szMsgBuffer, 1024, "ThreadAudioEncoder nAudioSampleCount:%d\n", nAudioSampleCount);
-		OutputDebugStringA(szMsgBuffer);
-		//Sleep(1000);
-		nAudioSampleCount++;
-		// test sample count end
-
-		// 建立两个数组（这里可以建立多个数组）用来缓冲音频数据
-
-		ZeroMemory(pBuffer1, AUDIO_BUF_SIZE);
-
-		wHdr1.lpData          = (LPSTR)pBuffer1;
-		wHdr1.dwBufferLength  = bufsize;
-		wHdr1.dwBytesRecorded = 0;
-		wHdr1.dwUser          = 0;
-		wHdr1.dwFlags         = 0;
-		wHdr1.dwLoops         = 1;
-
-		waveInPrepareHeader(hWaveIn, &wHdr1, sizeof(WAVEHDR));//准备一个波形数据块头用于录音
-		waveInAddBuffer(hWaveIn,     &wHdr1, sizeof(WAVEHDR));//指定波形数据块为录音输入缓存
-
-		waveInStart(hWaveIn);//开始录音
-
-		Sleep(1000);//等待声音录制1s
-
-		waveInReset(hWaveIn);//停止录音
-
-#if AUDIO_SAVE_PCM
-		FILE *pf = NULL;
-
-		//fopen_s(&pf, "output.pcm", "wb");
-		fopen_s(&pf, "output.pcm", "ab");
-
-		fwrite(pBuffer1, 1, wHdr1.dwBytesRecorded, pf);
-
-		ZeroMemory(szMsgBuffer, 1024);
-		sprintf_s(szMsgBuffer, 1024, "dwBytesRecorded:%lu\n", wHdr1.dwBytesRecorded);
-		OutputDebugStringA(szMsgBuffer);
-
-		if (pf)
-		{
-			fclose(pf);
-			pf = NULL;
-		}
-#endif
-
-		FILE *fp = fopen(".\\output.txt", "a+");
-		if (NULL != fp)
-		{
-			fprintf_s(fp, "wHdr1.dwBytesRecorded: %lu Bytes\n", wHdr1.dwBytesRecorded);
-			fclose(fp);
-			fp = NULL;
-		}
-
-		//framenum = wHdr1.dwBytesRecorded / size;
-#if 1
-		int nCurPos = 0;
-
-		//Encode
-		for (nCurPos = 0; nCurPos < wHdr1.dwBytesRecorded; ) 
-		{
-			if (nCurPos + size > wHdr1.dwBytesRecorded)
-			{
-				break;
-			}
-
-			av_init_packet(&pkt);
-			pkt.data = NULL;    // packet data will be allocated by the encoder
-			pkt.size = 0;
-
-			char szMsgBuffer[1024] = {0};
-
-			if (0 == nLeastDataLen)
-			{
-				memcpy(frame_buf, pBuffer1 + nCurPos, size);
-				nCurPos += size;
-
-				ZeroMemory(szMsgBuffer, 1024);
-				sprintf_s(szMsgBuffer, 1024, "size: %d", size);
-			}
-			else
-			{
-				memcpy(frame_buf, szTempBuffer, nLeastDataLen);
-				int nLen = size - nLeastDataLen;
-
-				memcpy(frame_buf, pBuffer1 + nCurPos, nLen);
-				nCurPos += nLen;
-
-				ZeroMemory(szMsgBuffer, 1024);
-				sprintf_s(szMsgBuffer, 1024, "nLeastDataLen: %d; nLen:%d", nLeastDataLen, nLen);
-
-				nLeastDataLen = 0;
-				ZeroMemory(szTempBuffer, TEMP_BUFFER_LEN);
-			}
-
-			OutputDebugStringA(szMsgBuffer);
-
-			//Read raw data
-			/*if (fread(frame_buf, 1, size, fp_in) <= 0)
-			{
-				printf("Failed to read raw data! \n");
-				return -1;
-			}
-			else if(feof(fp_in))
-			{
-				break;
-			}*/
-
-			//pFrame->pts = i;
-			ret = avcodec_encode_audio2(pCodecCtx, &pkt, pFrame, &got_output);
-			if (ret < 0) 
-			{
-				printf("Error encoding frame\n");
-				return -1;
-			}
-
-			if (got_output) 
-			{
-				printf("Succeed to encode frame: %5d\tsize:%5d\n",framecnt,pkt.size);
-				framecnt++;
-
-				FILE *fp_out = fopen(filename_out, "ab");
-				if (fp_out)
-				{
-					fwrite(pkt.data, 1, pkt.size, fp_out);
-
-					fclose(fp_out);
-					fp_out = NULL;
-				}
-
-				av_free_packet(&pkt);
-			}
-		}
-
-		nLeastDataLen = wHdr1.dwBytesRecorded - nCurPos - 1;
-		if (nLeastDataLen > 0)
-		{
-			ZeroMemory(szTempBuffer, TEMP_BUFFER_LEN);
-			memcpy(szTempBuffer, pBuffer1+nCurPos, nLeastDataLen);
-
-			ZeroMemory(szMsgBuffer, 1024);
-			sprintf_s(szMsgBuffer, 1024, "nLeastDataLen: %d. Add it to temp buffer", nLeastDataLen);
-			OutputDebugStringA(szMsgBuffer);
-		}
-#endif
+		av_free_packet(&pkt);
 		// make several input buffers and add them to the input queue
 
 		// S1: Capture the audio of microphone (PCM Format) and get the timeval (to calculate the timestamp)
@@ -1147,10 +1121,8 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 		// S2: Encode the PCM data to AAC data
 
 		// S3: Calculate the timestamp and add the buffer to BufferList
-
 	}
 
-#if 0
 	int i = 0;
 	//Flush Encoder
 	for (got_output = 1; got_output; i++) 
@@ -1178,7 +1150,6 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 			av_free_packet(&pkt);
 		}
 	}
-#endif 
 
 	if (pBuffer1)
 	{
@@ -1194,7 +1165,7 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 
 	//av_free(frame_buf);
 
-	::waveInClose(hWaveIn);
+#endif
 
 	return 0;
 }

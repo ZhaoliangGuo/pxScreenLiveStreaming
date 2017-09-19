@@ -26,27 +26,33 @@ void CPxQueueBuffer::Push(SPxBuffer *in_psBuffer)
 	::LeaveCriticalSection(&m_csBufferList);
 }
 
-SPxBuffer CPxQueueBuffer::Front()
+SPxBuffer *CPxQueueBuffer::Front()
 {
 	::EnterCriticalSection(&m_csBufferList);
 
-	/*if (m_qBufferList.size() == 0)
+	if (m_qBufferList.size() == 0)
 	{
 		::LeaveCriticalSection(&m_csBufferList);
 
 		return NULL;
-	}*/
+	}
 
-	SPxBuffer sPxBuffer = m_qBufferList.front();
+	//SPxBuffer sPxBuffer = m_qBufferList.front();
 
 	::LeaveCriticalSection(&m_csBufferList);
 
-	return sPxBuffer;
+	return &m_qBufferList.front();
 }
 
 void CPxQueueBuffer::Pop()
 {
 	::EnterCriticalSection(&m_csBufferList);
+	if (0 == m_qBufferList.size())
+	{
+		::LeaveCriticalSection(&m_csBufferList);
+
+		return ;
+	}
 
 	m_qBufferList.pop();
 

@@ -7,6 +7,8 @@ CPxBufferPool::CPxBufferPool(void)
 {
 	::InitializeCriticalSection(&m_csRingBuffer); 
 	m_nCurPos = 0;
+
+	m_nBufferSize = DEFAULT_BUFFER_SIZE;
 }
 
 CPxBufferPool::~CPxBufferPool(void)
@@ -18,6 +20,8 @@ CPxBufferPool::~CPxBufferPool(void)
 int CPxBufferPool::Init(int in_nBufferSize, int in_nBufferPoolLen)
 {
 	::EnterCriticalSection(&m_csRingBuffer); 
+
+	m_nBufferSize = in_nBufferSize;
 
 	SPxBuffer sPxBuffer;
 	
@@ -119,4 +123,9 @@ SPxBuffer *CPxBufferPool::GetBufferAt(int in_nPos)
 	::LeaveCriticalSection(&m_csRingBuffer);
 
 	return psPxBuffer;
+}
+
+int CPxBufferPool::GetBufferSize()
+{
+	return m_nBufferSize;
 }

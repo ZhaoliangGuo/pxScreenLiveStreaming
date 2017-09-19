@@ -11,7 +11,7 @@ public:
 
 public:
 	void      Push(SPxBuffer *in_psBuffer);
-	SPxBuffer Front();
+	SPxBuffer *Front();
 	void      Pop();
 	int       Size();
 	bool      IsEmpty();

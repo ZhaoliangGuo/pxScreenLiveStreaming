@@ -34,13 +34,14 @@ extern int gettimeofday(struct timeval*, int*);
 extern UINT64 GetCurrentTimestamp();
 
 #define VIDEO_SAVE_BMP  0
-#define VIDEO_SAVE_YUV  1
-#define VIDEO_SAVE_H264 1
+#define VIDEO_SAVE_YUV  0
+#define VIDEO_SAVE_H264 0
 #define VIDEO_SAVE_H264_FROM_BUFFERLIST 1
 #define DEBUG_VIDEO_TIME_ANALYZE 0
 
 #define DEBUG_AUDIO_CAPTURE_PCM 1
 #define AUDIO_SAVE_PCM 1
+#define AUDIO_SAVE_PCM_FROM_BUFFERLIST 1
 #define AUDIO_SAVE_AAC 0
 #define AUDIO_SAVE_AAC_FROM_BUFFERLIST 0
 
