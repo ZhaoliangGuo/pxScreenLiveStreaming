@@ -902,8 +902,6 @@ DWORD WINAPI ThreadAudioCapture(LPVOID lp)
 		nAudioSampleCount++;
 		// test sample count end
 
-		// 建立两个数组（这里可以建立多个数组）用来缓冲音频数据
-
 		psPCMBuffer = g_oPCMBufferPool.GetBufferAt(g_oPCMBufferPool.GetEmptyBufferPos());
 		psPCMBuffer->eMediaType = kePxMediaType_Audio;
 
@@ -917,6 +915,8 @@ DWORD WINAPI ThreadAudioCapture(LPVOID lp)
 		waveInPrepareHeader(hWaveIn, &wHdr1, sizeof(WAVEHDR));//准备一个波形数据块头用于录音
 		waveInAddBuffer(hWaveIn,     &wHdr1, sizeof(WAVEHDR));//指定波形数据块为录音输入缓存
 
+		// Capture the audio of microphone (PCM Format) 
+		// and get the timeval (to calculate the timestamp)
 		waveInStart(hWaveIn);//开始录音
 
 		Sleep(1000);//等待声音录制1s
@@ -957,8 +957,84 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 {
 	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
 
-// Audio Capture
-/////////////////////////////////////////////////////////////////////////////////
+	AVCodec        *pCodec    = NULL;
+	AVCodecContext *pCodecCtx = NULL;
+	AVFrame        *pFrame    = NULL;
+	uint8_t        *pui8FrameBuffer = NULL;
+
+	int nRet       = 0;
+	int got_output = 0;
+	int size       = 0;
+	int nFrameCnt  = 0;
+
+	AVPacket pkt;
+
+	AVCodecID nCodecId = AV_CODEC_ID_AAC;
+
+	char szOutputFileName[] = "output.aac";
+	
+	avcodec_register_all();
+
+	pCodec = avcodec_find_encoder(nCodecId);
+	if (!pCodec) 
+	{
+		printf("Codec not found\n");
+
+		return -1;
+	}
+
+	pCodecCtx = avcodec_alloc_context3(pCodec);
+	if (!pCodecCtx) 
+	{
+		printf("Could not allocate video codec context\n");
+		return -1;
+	}
+
+	pCodecCtx->codec_id       = nCodecId;
+	pCodecCtx->codec_type     = AVMEDIA_TYPE_AUDIO;
+	pCodecCtx->sample_fmt     = AV_SAMPLE_FMT_S16;
+	pCodecCtx->sample_rate    = 44100;
+	pCodecCtx->channel_layout = AV_CH_LAYOUT_MONO;
+	//pCodecCtx->channel_layout=AV_CH_LAYOUT_STEREO;
+	pCodecCtx->channels       = av_get_channel_layout_nb_channels(pCodecCtx->channel_layout);
+	pCodecCtx->bit_rate       = 64000;
+
+	if (avcodec_open2(pCodecCtx, pCodec, NULL) < 0) 
+	{
+		printf("Could not open codec\n");
+
+		return -1;
+	}
+
+	pFrame             = av_frame_alloc();
+	pFrame->nb_samples = pCodecCtx->frame_size;
+	pFrame->format     = pCodecCtx->sample_fmt;
+
+	size = av_samples_get_buffer_size(NULL, 
+		                              pCodecCtx->channels, 
+									  pCodecCtx->frame_size,
+		                              pCodecCtx->sample_fmt, 
+									  1);
+
+	pui8FrameBuffer = (uint8_t *)av_malloc(size);
+	avcodec_fill_audio_frame(pFrame, 
+		                     pCodecCtx->channels, 
+		                     pCodecCtx->sample_fmt,
+		                     (const uint8_t*)pui8FrameBuffer, 
+		                     size, 
+		                     1);
+
+	av_init_packet(&pkt);
+	pkt.data = NULL;    // packet data will be allocated by the encoder
+	pkt.size = 0;
+
+	char szMsgBuffer[1024] = {0};
+	ZeroMemory(szMsgBuffer, 1024);
+	sprintf_s(szMsgBuffer, 1024, "size: %d", size);
+	OutputDebugStringA(szMsgBuffer);
+
+	int nPosInFrameBuffer = 0;
+
 	while (true)
 	{
 		while (!g_oPCMQueueBuffer.IsEmpty())
@@ -981,7 +1057,70 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 				fclose(fpPCMFile);
 				fpPCMFile = NULL;
 			}
+
+			ZeroMemory(szMsgBuffer, 1024);
+			sprintf_s(szMsgBuffer, 1024, "psPxBuffer->nDataLength: %d", psPxBuffer->nDataLength);
+			OutputDebugStringA(szMsgBuffer);
 #endif
+			int nPosInPCMBuffer  = 0;
+
+			do 
+			{
+				int nBytesLeft   = psPxBuffer->nDataLength - nPosInPCMBuffer;
+				int nBytesNeeded = size - nPosInFrameBuffer;
+				if (nBytesLeft >= nBytesNeeded)
+				{
+					memcpy(pui8FrameBuffer + nPosInFrameBuffer, 
+						   psPxBuffer->lpBuffer + nPosInPCMBuffer, 
+						   nBytesNeeded);
+
+					ZeroMemory(szMsgBuffer, 1024);
+					sprintf_s(szMsgBuffer, 1024, "memcpy nBytesNeeded: %d", nBytesNeeded);
+					OutputDebugStringA(szMsgBuffer);
+
+					nPosInPCMBuffer   += nBytesNeeded;
+					nPosInFrameBuffer = 0;
+
+					// Encode the PCM data to AAC data
+					nRet = avcodec_encode_audio2(pCodecCtx, &pkt, pFrame, &got_output);
+					if (nRet < 0) 
+					{
+						OutputDebugStringA("ThreadAudioEncoder : avcodec_encode_audio2 : Error encoding frame\n");
+
+						return -1;
+					}
+
+					if (got_output) 
+					{
+						printf("Succeed to encode frame: %5d\tsize:%5d\n",nFrameCnt, pkt.size);
+						nFrameCnt++;
+
+						FILE *fpAACFile = fopen(szOutputFileName, "ab");
+						if (fpAACFile)
+						{
+							fwrite(pkt.data, 1, pkt.size, fpAACFile);
+
+							fclose(fpAACFile);
+							fpAACFile = NULL;
+						}
+
+						av_free_packet(&pkt);
+					}
+				}
+				else
+				{
+					memcpy(pui8FrameBuffer + nPosInFrameBuffer, 
+						   psPxBuffer->lpBuffer + nPosInPCMBuffer, 
+						   nBytesLeft);
+					nPosInFrameBuffer = nBytesLeft;
+
+					ZeroMemory(szMsgBuffer, 1024);
+					sprintf_s(szMsgBuffer, 1024, "memcpy nBytesLeft: %d", nBytesLeft);
+					OutputDebugStringA(szMsgBuffer);
+
+					break;
+				}
+			} while (true);
 
 			g_oPCMQueueBuffer.Pop();
 		}
@@ -989,146 +1128,12 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 		Sleep(2);
 	}
 
-// Audio Encoder
-/////////////////////////////////////////////////////////////////////////////////
-
-#if 0
-	AVCodec *pCodec;
-	AVCodecContext *pCodecCtx= NULL;
-	int ret, got_output;
-	//FILE *fp_in;
-
-	AVFrame *pFrame;
-	uint8_t* frame_buf;
-	int size=0;
-
-	AVPacket pkt;
-	int y_size;
-	int framecnt=0;
-
-	AVCodecID codec_id=AV_CODEC_ID_AAC;
-
-	char filename_out[]="output.aac";
-
-	int framenum = 1000;	
-
-	avcodec_register_all();
-
-	pCodec = avcodec_find_encoder(codec_id);
-	if (!pCodec) 
-	{
-		printf("Codec not found\n");
-		return -1;
-	}
-
-	pCodecCtx = avcodec_alloc_context3(pCodec);
-	if (!pCodecCtx) {
-		printf("Could not allocate video codec context\n");
-		return -1;
-	}
-
-	pCodecCtx->codec_id   = codec_id;
-	pCodecCtx->codec_type = AVMEDIA_TYPE_AUDIO;
-	pCodecCtx->sample_fmt = AV_SAMPLE_FMT_S16;
-	//pCodecCtx->sample_fmt = AV_SAMPLE_FMT_FLTP;
-	pCodecCtx->sample_rate= 44100;
-	//pCodecCtx->channel_layout=AV_CH_LAYOUT_STEREO;
-	pCodecCtx->channel_layout=AV_CH_LAYOUT_MONO;
-	pCodecCtx->channels = av_get_channel_layout_nb_channels(pCodecCtx->channel_layout);
-	pCodecCtx->bit_rate = 32000;  
-
-	if (avcodec_open2(pCodecCtx, pCodec, NULL) < 0) 
-	{
-		printf("Could not open codec\n");
-
-		return -1;
-	}
-
-	pFrame             = av_frame_alloc();
-	pFrame->nb_samples = pCodecCtx->frame_size;
-	pFrame->format     = pCodecCtx->sample_fmt;
-
-	size = av_samples_get_buffer_size(NULL, 
-									  pCodecCtx->channels,
-									  pCodecCtx->frame_size,
-									  pCodecCtx->sample_fmt, 
-									  1);
-
-	frame_buf = (uint8_t *)av_malloc(size);
-	avcodec_fill_audio_frame(pFrame, 
-						     pCodecCtx->channels, 
-							 pCodecCtx->sample_fmt,
-							 (const uint8_t*)frame_buf, 
-							 size, 
-							 1);
-
-    #define TEMP_BUFFER_LEN (1024*4)
-	char szTempBuffer[TEMP_BUFFER_LEN] = {0};
-	int nLeastDataLen = 0;
-
-	av_init_packet(&pkt);
-	pkt.data = NULL;    // packet data will be allocated by the encoder
-	pkt.size = 0;
-
-	char szMsgBuffer[1024] = {0};
-
-	//memcpy(frame_buf, pBuffer1 + nCurPos, size);
-
-	ZeroMemory(szMsgBuffer, 1024);
-	sprintf_s(szMsgBuffer, 1024, "size: %d", size);
-	
-
-	OutputDebugStringA(szMsgBuffer);
-
-	//Read raw data
-	/*if (fread(frame_buf, 1, size, fp_in) <= 0)
-	{
-		printf("Failed to read raw data! \n");
-		return -1;
-	}
-	else if(feof(fp_in))
-	{
-		break;
-	}*/
-
-	//pFrame->pts = i;
-	ret = avcodec_encode_audio2(pCodecCtx, &pkt, pFrame, &got_output);
-	if (ret < 0) 
-	{
-		printf("Error encoding frame\n");
-		return -1;
-	}
-
-	if (got_output) 
-	{
-		printf("Succeed to encode frame: %5d\tsize:%5d\n",framecnt,pkt.size);
-		framecnt++;
-
-		FILE *fp_out = fopen(filename_out, "ab");
-		if (fp_out)
-		{
-			fwrite(pkt.data, 1, pkt.size, fp_out);
-
-			fclose(fp_out);
-			fp_out = NULL;
-		}
-
-		av_free_packet(&pkt);
-		// make several input buffers and add them to the input queue
-
-		// S1: Capture the audio of microphone (PCM Format) and get the timeval (to calculate the timestamp)
-
-		// S2: Encode the PCM data to AAC data
-
-		// S3: Calculate the timestamp and add the buffer to BufferList
-	}
-
 	int i = 0;
 	//Flush Encoder
 	for (got_output = 1; got_output; i++) 
 	{
-		ret = avcodec_encode_audio2(pCodecCtx, &pkt, NULL, &got_output);
-		if (ret < 0) 
+		nRet = avcodec_encode_audio2(pCodecCtx, &pkt, NULL, &got_output);
+		if (nRet < 0) 
 		{
 			printf("Error encoding frame\n");
 			return -1;
@@ -1138,34 +1143,23 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 		{
 			printf("Flush Encoder: Succeed to encode 1 frame!\tsize:%5d\n",pkt.size);
 
-			FILE *fp_out = fopen(filename_out, "ab");
-			if (fp_out)
+			FILE *fpAACFile = fopen(szOutputFileName, "ab");
+			if (fpAACFile)
 			{
-				fwrite(pkt.data, 1, pkt.size, fp_out);
-
-				fclose(fp_out);
-				fp_out = NULL;
+				fwrite(pkt.data, 1, pkt.size, fpAACFile);
+				fclose(fpAACFile);
+				fpAACFile = NULL;
 			}
 
 			av_free_packet(&pkt);
 		}
 	}
 
-	if (pBuffer1)
-	{
-		delete pBuffer1;   
-		pBuffer1 = NULL;
-	}
-
-	//fclose(fp_out);
 	avcodec_close(pCodecCtx);
 	av_free(pCodecCtx);
 	av_freep(&pFrame->data[0]);
 	av_frame_free(&pFrame);
-
-	//av_free(frame_buf);
-
-#endif
+	av_free(pui8FrameBuffer);
 
 	return 0;
 }
