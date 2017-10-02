@@ -37,11 +37,11 @@ SPxBuffer *CPxQueueBuffer::Front()
 		return NULL;
 	}
 
-	//SPxBuffer sPxBuffer = m_qBufferList.front();
+	SPxBuffer *psPxBuffer = &m_qBufferList.front();
 
 	::LeaveCriticalSection(&m_csBufferList);
 
-	return &m_qBufferList.front();
+	return psPxBuffer;
 }
 
 void CPxQueueBuffer::Pop()
@@ -61,22 +61,10 @@ void CPxQueueBuffer::Pop()
 
 int CPxQueueBuffer::Size()
 {
-	::EnterCriticalSection(&m_csBufferList);
-
-	int nSize = m_qBufferList.size();
-
-	::LeaveCriticalSection(&m_csBufferList);
-
-	return nSize;
+	return m_qBufferList.size();
 }
 
 bool CPxQueueBuffer::IsEmpty()
 {
-	::EnterCriticalSection(&m_csBufferList);
-
-	bool bIsEmpty = m_qBufferList.empty();
-
-	::LeaveCriticalSection(&m_csBufferList);
-
-	return bIsEmpty;
+	return m_qBufferList.empty();
 }

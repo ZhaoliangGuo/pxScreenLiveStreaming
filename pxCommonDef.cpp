@@ -108,3 +108,54 @@ UINT64 GetCurrentTimestamp()
 
 	return ui64TimeStamp;
 }
+
+bool g_IsKeyFrame(const uint8_t *in_kui8Data, const int in_knSize)
+{
+	assert(in_knSize > 5);
+
+	int  nNALType  = 0;
+	bool bKeyFrame = false;
+
+	if (AV_RB32(in_kui8Data) == 0x00000001)	
+	{
+		nNALType = in_kui8Data[4] & 0x1F;
+	}
+	else if (AV_RB24(in_kui8Data) == 0x000001)
+	{
+		nNALType = in_kui8Data[3] & 0x1F;
+	}
+
+	if ((5 == nNALType) || (7 == nNALType) || (8 == nNALType))
+	{
+		bKeyFrame = true;
+	}
+	else
+	{
+		bKeyFrame = false;
+	}
+
+	return bKeyFrame;
+}
+
+bool g_WriteFile(const char *in_kpszFileName, const uint8_t *in_kui8Data, const int in_knSize, char *in_kszMode)
+{
+	assert(NULL != in_kpszFileName);
+	assert(NULL != in_kui8Data);
+	assert(in_knSize > 0);
+
+	FILE *fpFile = fopen(in_kpszFileName, in_kszMode);
+	if (NULL == fpFile)
+	{
+		return false;
+	}
+
+	fwrite(in_kui8Data, 1, in_knSize, fpFile);
+
+	if (fpFile)
+	{
+		fclose(fpFile);
+		fpFile = NULL;
+	}
+
+	return true;
+}

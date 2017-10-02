@@ -17,7 +17,8 @@ struct SPxBuffer
 	EPxMediaType eMediaType;
 	LPBYTE       lpBuffer;
 	int          nDataLength;
-	timeval      tvTimestamp;
+	//timeval      tvTimestamp;
+	UINT64       ui64Timestamp; // µ•Œª ∫¡√Î
 	bool         bVideoKeyFrame;
 
 	SPxBuffer()
@@ -35,8 +36,7 @@ struct SPxBuffer
 		eMediaType          = kePxMediaType_Invalid;
 		lpBuffer            = NULL;
 		nDataLength         = 0;
-		tvTimestamp.tv_sec  = 0;
-		tvTimestamp.tv_usec = 0;
+		ui64Timestamp          = 0;
 		bVideoKeyFrame      = false;
 	}
 };

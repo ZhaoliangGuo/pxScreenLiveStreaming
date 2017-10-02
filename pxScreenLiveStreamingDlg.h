@@ -43,8 +43,8 @@ protected:
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
 public:
-	afx_msg void OnBnClickedButtonStart();
-	afx_msg void OnBnClickedButtonStop();
+	afx_msg void OnStartRecord();
+	afx_msg void OnStopRecord();
 	bool Init();
 
 // video
@@ -52,18 +52,10 @@ public:
 	int									m_nScreenWidth;
 	int									m_nScreenHeight;
 
-
-	/*HDC									m_hScreenDC;
-	HDC									m_hMemDC;
-	HWND								m_hDesktopWnd;
-	HBITMAP								m_hCompatibleBitmap;*/
-
 	CDC *pDC;
 	CDC memDC; 
 	CBitmap memBitmap;                // 建立和屏幕兼容的bitmap
 	CBitmap m_hCompatibleBitmap;
-
-	//BITMAPINFO							m_BitmapInfo;
 
 	BITMAPFILEHEADER					m_BitmapFileHeader;
 	BITMAPINFOHEADER                    m_BitmapInfoHeader;
@@ -71,9 +63,6 @@ public:
 	BYTE							*	m_pBitmapBuffer;
 	int									m_nBitmapBufferLen;
 
-	int m_nFps;
-	double m_fPeriod;
-	int m_nTimetoSleep;
 	LARGE_INTEGER m_liPerfFreq;
 	LARGE_INTEGER m_liBeginTime;
 	LARGE_INTEGER m_liEndTime;
@@ -84,7 +73,4 @@ public:
 	int									m_nUOffset;
 	int									m_nVOffset;
 	int                                 m_nYUVBufferSize;
-
-public:
-	/*static*//* DWORD WINAPI ThreadStart(LPVOID lp);*/
 };

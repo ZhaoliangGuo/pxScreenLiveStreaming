@@ -26,20 +26,29 @@ extern "C"
 #define new DEBUG_NEW
 #endif
 
+bool g_bStop             = false; 
+
+bool g_bVideoCaptureDone = false; // 视频采集是否结束
+bool g_bVideoEncodeDone  = false; // 视频编码是否结束
+bool g_bAudioCaptureDone = false; // 音频采集是否结束
+bool g_bAudioEncodeDone  = false; // 音频编码是否结束
+
+DWORD WINAPI ThreadVideoCapture(LPVOID lp);
 DWORD WINAPI ThreadVideoEncoder(LPVOID lp);
-DWORD WINAPI ThreadVideoCaptureTest(LPVOID lp);
-DWORD WINAPI ThreadWriteTest(LPVOID lp);
 
 DWORD WINAPI ThreadAudioCapture(LPVOID lp);
 DWORD WINAPI ThreadAudioEncoder(LPVOID lp);
 
-void CALLBACK waveInProc( 
-	HWAVEIN hwi,    //声音输入设备句柄
-	UINT uMsg,      //产生的消息，由系统给出
-	DWORD dwInstance,//在waveinopen中给出要传递给该函数的数据
-	DWORD dwParam1, //附加数据１
-	DWORD dwParam2  //附加数据２
-	);
+DWORD WINAPI ThreadFlvRecorder(LPVOID lp);
+
+// 回调函数
+DWORD CALLBACK MicrophoneCallback(  
+	HWAVEIN hWaveIn,  // 声音输入设备句柄  
+	UINT  uMsg,       // 产生的消息，由系统给出
+	DWORD dwInstance, // 在waveinopen中给出要传递给该函数的数据  
+	DWORD dwParam1,   // 附加数据1
+	DWORD dwParam2);  // 附加数据2
+
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -73,10 +82,6 @@ END_MESSAGE_MAP()
 
 
 // CpxScreenLiveStreamingDlg 对话框
-
-
-
-
 CPxScreenLiveStreamingDlg::CPxScreenLiveStreamingDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(CPxScreenLiveStreamingDlg::IDD, pParent)
 {
@@ -100,8 +105,8 @@ BEGIN_MESSAGE_MAP(CPxScreenLiveStreamingDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
-	ON_BN_CLICKED(IDC_BUTTON_START, &CPxScreenLiveStreamingDlg::OnBnClickedButtonStart)
-	ON_BN_CLICKED(IDC_BUTTON_STOP, &CPxScreenLiveStreamingDlg::OnBnClickedButtonStop)
+	ON_BN_CLICKED(IDC_BUTTON_START, &CPxScreenLiveStreamingDlg::OnStartRecord)
+	ON_BN_CLICKED(IDC_BUTTON_STOP, &CPxScreenLiveStreamingDlg::OnStopRecord)
 END_MESSAGE_MAP()
 
 
@@ -140,20 +145,11 @@ BOOL CPxScreenLiveStreamingDlg::OnInitDialog()
 
 	/*int nScreenWidth  = GetSystemMetrics(SM_CXSCREEN);
 	int nScreenHeight = GetSystemMetrics(SM_CYSCREEN);*/
-	int nYUVBufferSize = m_nScreenWidth * m_nScreenHeight * 1.5;
+	m_nYUVBufferSize = m_nScreenWidth * m_nScreenHeight * 1.5;
 
-	g_oYUVBufferPool.Init(nYUVBufferSize);
+	g_oYUVBufferPool.Init(m_nYUVBufferSize);
 	g_oPCMBufferPool.Init(512*1024);
 	g_oCodedBufferPool.Init(1024*1024);
-
-
-	DWORD dwVideoCaptureThreadId;
-
-	HANDLE hVideoCaptureThread = CreateThread(NULL, NULL, ThreadVideoCaptureTest, this, 0, &dwVideoCaptureThreadId);
-
-	DWORD dwThreadId;
-
-	HANDLE hThread = CreateThread(NULL, NULL, ThreadWriteTest, this, 0, &dwThreadId);
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -207,557 +203,14 @@ HCURSOR CPxScreenLiveStreamingDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
-bool g_bStop         = false;
-bool g_bVideoDataFinished = false;
-
-void CPxScreenLiveStreamingDlg::OnBnClickedButtonStart()
-{
-	// TODO: 在此添加控件通知处理程序代码
-	g_bStop         = false;
-	g_bVideoDataFinished = false;
-
-	DWORD dwVideoThreadId;
-	HANDLE hThread = CreateThread(NULL, NULL, ThreadVideoEncoder, this, 0, &dwVideoThreadId);
-
-	DWORD dwAudioCaptureThreadId;
-	DWORD dwAudioEncoderThreadId;
-	HANDLE hAudioCaptureThread = CreateThread(NULL, NULL, ThreadAudioCapture, this, 0, &dwAudioCaptureThreadId);
-	HANDLE hAudioEncodeThread  = CreateThread(NULL, NULL, ThreadAudioEncoder, this, 0, &dwAudioEncoderThreadId);
-}
-
-void CPxScreenLiveStreamingDlg::OnBnClickedButtonStop()
-{
-	// TODO: 在此添加控件通知处理程序代码
-	g_bStop = true;
-}
-
-
-DWORD WINAPI ThreadVideoCaptureTest(LPVOID lp)
-{
-
-	return 0;
-}
-
-DWORD WINAPI ThreadWriteTest(LPVOID lp)
-{
-	CPxFLVRecorder oFLVRecorder;
-	char *szFLVFileName = "output.flv";
-	oFLVRecorder.SetFileName(szFLVFileName);
-	oFLVRecorder.Begin();
-
-	while(true)
-	{
-		while (!g_oCodedQueueBuffer.IsEmpty())
-		{
-			SPxBuffer *psPxBuffer = g_oCodedQueueBuffer.Front();
-			if (NULL == psPxBuffer->lpBuffer)
-			{
-				Sleep(2);
-
-				continue;
-			}
-
-#if VIDEO_SAVE_H264_FROM_BUFFERLIST
-			FILE *fpH264File = fopen("output_v2.h264", "ab+");
-
-			fwrite(psPxBuffer->lpBuffer, 1, psPxBuffer->nDataLength, fpH264File);
-
-			if (fpH264File)
-			{
-				fclose(fpH264File);
-				fpH264File = NULL;
-			}
-#endif
-			oFLVRecorder.ReceiveVideoData(0, "127.0.0.1", psPxBuffer);
-
-			g_oCodedQueueBuffer.Pop();
-		}
-
-		Sleep(2);
-
-		if (g_bVideoDataFinished)
-		{
-			break;
-		}
-	}
-
-	oFLVRecorder.End();
-	oFLVRecorder.Close();
-
-	return 0;
-}
-
-// TEST VIDEO
-DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
-{
-	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
-
-	AVCodec        *pCodec    = NULL;
-	AVCodecContext *pCodecCtx = NULL;
-
-	int nRet;
-
-	AVFrame *pFrame = NULL;
-	AVPacket pkt;
-
-
-	AVCodecID codec_id = AV_CODEC_ID_H264;
-
-	avcodec_register_all();
-
-	pCodec = avcodec_find_encoder(codec_id);
-	if (!pCodec) 
-	{
-		printf("Codec not found\n");
-		return -1;
-	}
-
-	pCodecCtx = avcodec_alloc_context3(pCodec);
-	if (!pCodecCtx) 
-	{
-		printf("Could not allocate video codec context\n");
-		return -1;
-	}
-
-	pCodecCtx->bit_rate       = 1024*1024;
-	/*pCodecCtx->rc_max_rate    = 1024*1024;
-	pCodecCtx->rc_min_rate    = 1024*1024;
-	pCodecCtx->rc_buffer_size = 1024*1024;*/
-
-	pCodecCtx->width         = pDlg->m_nScreenWidth;
-	pCodecCtx->height        = pDlg->m_nScreenHeight;
-	pCodecCtx->time_base.num = 1;
-	pCodecCtx->time_base.den = 25;
-	pCodecCtx->gop_size      = 25;
-	pCodecCtx->max_b_frames  = 1;
-	pCodecCtx->pix_fmt       = AV_PIX_FMT_YUV420P;
-
-	if (codec_id == AV_CODEC_ID_H264)
-	{
-		av_opt_set(pCodecCtx->priv_data, "preset", "slow", 0);
-	}
-
-	if (avcodec_open2(pCodecCtx, pCodec, NULL) < 0) 
-	{
-		printf("Could not open codec\n");
-
-		return -1;
-	}
-
-	pFrame = av_frame_alloc();
-	if (!pFrame) 
-	{
-		printf("Could not allocate video frame\n");
-		return -1;
-	}
-
-	int nPictureSize = avpicture_get_size(pCodecCtx->pix_fmt, 
-							          pCodecCtx->width, 
-									  pCodecCtx->height);
-
-	uint8_t* picture_buf = (uint8_t *)av_malloc(nPictureSize);
-	avpicture_fill((AVPicture *)pFrame, 
-		           picture_buf, 
-				   pCodecCtx->pix_fmt, 
-		           pCodecCtx->width, 
-				   pCodecCtx->height);
-
-	int nVideoFrameCnt = 0;
-
-	int got_packet = 0;
-
-	int nH264BytesCount = 0;
-
-	char *szOutputFile = "output.h264";
-	/*FILE *fpH264File = fopen(szOutputFile, "wb+");
-	if (!fpH264File) 
-	{
-		printf("Could not open %s\n", szOutputFile);
-
-		return -1;
-	}*/
-
-	UINT64 ui64LastVideTimeStamp = 0; 
-
-	char szMsgBuffer[1024] = {0};
-
-	SPxBuffer sTempBuffer;
-
-	while (true)
-	{
-		if (g_bStop)
-		{
-			break;
-		}
-
-		// test unit #1 begin
-		/*CString strCurTime = CTime::GetCurrentTime().Format("%Y-%m-%d %H:%M:%S");
-		OutputDebugStringA(strCurTime);
-		Sleep(1000);*/
-		// test unit #1 end
-
-		// S1: capture screen in rgb format
-		/*BitBlt(pDlg->m_hMemDC, 0, 0, pDlg->m_nScreenWidth, pDlg->m_nScreenHeight, 
-		pDlg->m_hScreenDC, 0, 0, SRCCOPY);
-
-		GetDIBits(pDlg->m_hMemDC, pDlg->m_hCompatibleBitmap, 0, pDlg->m_nScreenHeight, 
-		pDlg->m_pBitmapBuffer, &pDlg->m_BitmapInfo, DIB_RGB_COLORS);*/
-
-#if DEBUG_VIDEO_TIME_ANALYZE
-		UINT64 ui64Start = GetCurrentTimestamp();
-#endif 
-
-		timeval tvTimestamp;
-		gettimeofday(&tvTimestamp, NULL);
-
-		pDlg->memDC.BitBlt(0, 0, pDlg->m_nScreenWidth, pDlg->m_nScreenHeight, pDlg->pDC, 0, 0, SRCCOPY);//复制屏幕图像到内存DC
-
-		GetDIBits(pDlg->memDC.m_hDC, 
-			     (HBITMAP) pDlg->memBitmap.m_hObject, 
-				 0, 
-				 pDlg->m_nScreenHeight, 
-				 pDlg->m_pBitmapBuffer, 
-				(LPBITMAPINFO) &pDlg->m_BitmapInfoHeader, 
-				DIB_RGB_COLORS);            // 获取位图数据
-
-#if DEBUG_VIDEO_TIME_ANALYZE
-		UINT64 ui64BMPDone = GetCurrentTimestamp();
-
-		ZeroMemory(szMsgBuffer, 1024);
-		sprintf_s(szMsgBuffer, 1024, "BMP: %I64u ms", ui64BMPDone - ui64Start);
-		OutputDebugStringA(szMsgBuffer);
-#endif
-		// test unit begin #2 : 
-		// to check the capure result,
-		// save it to a bmp file
-#if VIDEO_SAVE_BMP
-		CString strCurTime = CTime::GetCurrentTime().Format("_%Y-%m-%d_%H-%M-%S");
-
-		CString strBmpFileName = ".\\" + strCurTime + ".bmp";
-
-		FILE *fp = fopen(strBmpFileName, "w+b");
-
-		if (fp == NULL)
-		{
-			Sleep(1000);
-			continue;
-		}
-
-		fwrite(&pDlg->m_BitmapFileHeader, 1, sizeof(BITMAPFILEHEADER), fp); // 写入位图文件头
-		fwrite(&pDlg->m_BitmapInfoHeader, 1, sizeof(BITMAPINFOHEADER), fp); // 写入位图信息头
-
-		fwrite(pDlg->m_pBitmapBuffer, 1, pDlg->m_nBitmapBufferLen, fp);   // 写入位图数据
-
-		fclose(fp);
-#endif
-		// test unit end #2
-
-		// S2: rgb to yuv420p
-		rgb32_to_yv12_mmx((unsigned char *)pDlg->m_pYUVBuffer, 
-			(unsigned char *)(pDlg->m_pYUVBuffer+pDlg->m_nUOffset), 
-			(unsigned char *)(pDlg->m_pYUVBuffer+pDlg->m_nVOffset),
-			(unsigned char *)pDlg->m_pBitmapBuffer, 
-			pDlg->m_nScreenWidth, 
-			pDlg->m_nScreenHeight, 
-			pDlg->m_nScreenWidth);
-
-#if DEBUG_VIDEO_TIME_ANALYZE
-		UINT64 ui64YUVDone = GetCurrentTimestamp();
-
-		ZeroMemory(szMsgBuffer, 1024);
-		sprintf_s(szMsgBuffer, 1024, "YUV: %I64u ms", ui64YUVDone - ui64BMPDone);
-		OutputDebugStringA(szMsgBuffer);
-#endif 
-
-		// test unit #3 begin
-		// check the yuv
-#if VIDEO_SAVE_YUV
-		FILE *fpYUVFile = fopen("output.yuv", "a+");
-
-		if (fpYUVFile == NULL)
-		{
-			Sleep(1000);
-			continue;
-		}
-
-		fwrite(pDlg->m_pYUVBuffer, 1, pDlg->m_nYUVBufferSize, fpYUVFile);
-
-		fclose(fpYUVFile);
-#endif
-		// test unit #3 end
-
-		// S3: encode yuv420p
-		pFrame->data[0] = pDlg->m_pYUVBuffer;                     // Y
-		pFrame->data[1] = pDlg->m_pYUVBuffer + pDlg->m_nUOffset;  // U 
-		pFrame->data[2] = pDlg->m_pYUVBuffer + pDlg->m_nVOffset;  // V
-
-		av_init_packet(&pkt);
-		pkt.data = NULL;    // packet data will be allocated by the encoder
-		pkt.size = 0;
-
-		pFrame->pts= ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;;
-
-        /* encode the image */
-        nRet = avcodec_encode_video2(pCodecCtx, &pkt, pFrame, &got_packet);
-        if (nRet < 0) 
-		{
-            printf("Error encoding frame\n");
-            return -1;
-        }
-
-        if (got_packet) 
-		{
-			//if (pkt.size > 0)
-			{
-				printf("Succeed to encode frame: %5d\tsize:%5d\n", nVideoFrameCnt, pkt.size);
-
-				nH264BytesCount += pkt.size;
-
-				nVideoFrameCnt++;
-#if VIDEO_SAVE_H264
-				FILE *fpH264File = fopen(szOutputFile, "ab+");
-
-				fwrite(pkt.data, 1, pkt.size, fpH264File);
-
-				if (fpH264File)
-				{
-					fclose(fpH264File);
-					fpH264File = NULL;
-				}
-#endif
-
-				/*int nPos = g_oPxBufferPool.GetEmptyBufferPos();
-				memcpy(g_vlpBufferPool[nPos].lpBuffer, pkt.data, pkt.size);
-				g_vlpBufferPool[nPos].nDataLength = pkt.size;
-
-				g_qCodedBufferList.push(g_vlpBufferPool[nPos]);*/
-
-#if DEBUG_VIDEO_TIME_ANALYZE
-				UINT64 ui64H264Done = GetCurrentTimestamp();
-				ZeroMemory(szMsgBuffer, 1024);
-				sprintf_s(szMsgBuffer, 1024, "264: %I64u ms", ui64H264Done - ui64YUVDone);
-				OutputDebugStringA(szMsgBuffer);
-#endif
-				
-				//unsigned int uiTimestamp = 0;
-				
-
-#if DEBUG_VIDEO_TIME_ANALYZE
-				UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
-
-				ZeroMemory(szMsgBuffer, 1024);
-				sprintf_s(szMsgBuffer, 1024, "Video timestamp: %I64u, Delta:%I64u", ui64TimeStamp, ui64TimeStamp - ui64LastVideTimeStamp);
-				OutputDebugStringA(szMsgBuffer);
-				ui64LastVideTimeStamp = ui64TimeStamp;
-#endif 
-
-				int nNALType = 0;
-
-				if (pkt.size > 5)
-				{
-					if (AV_RB32(pkt.data) == 0x00000001)	
-					{
-						nNALType = pkt.data[4] & 0x1F;
-					}
-					else if (AV_RB24(pkt.data) == 0x000001)
-					{
-						nNALType = pkt.data[3] & 0x1F;
-					}
-
-					if (5 == nNALType
-						||
-						7 == nNALType
-						||
-						8 == nNALType)
-					{
-						sTempBuffer.bVideoKeyFrame = true;
-					}
-					else
-					{
-						sTempBuffer.bVideoKeyFrame = false;
-					}
-				}
-
-				sTempBuffer.lpBuffer    = pkt.data;
-				sTempBuffer.nDataLength = pkt.size;
-				sTempBuffer.eMediaType  = kePxMediaType_Video;
-				sTempBuffer.tvTimestamp = tvTimestamp;
-
-				int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
-				g_oCodedBufferPool.SetBufferAt(nPos, &sTempBuffer);
-
-				SPxBuffer *psPxBuffer = g_oCodedBufferPool.GetBufferAt(nPos);
-				if (NULL != psPxBuffer)
-				{
-					g_oCodedQueueBuffer.Push(psPxBuffer);
-				}
-
-				av_free_packet(&pkt);
-			}  
-        }
-
-		// S4: calculate the timestamp 
-		// and add the video encoded buffer to video buffer list 
-
-		//Sleep(40);
-	}
-
-	//Flush Encoder
-
-	got_packet = 1;
-	while (got_packet)
-	{
-		nRet = avcodec_encode_video2(pCodecCtx, &pkt, NULL, &got_packet);
-		if (nRet < 0) 
-		{
-			printf("Error encoding frame\n");
-			return -1;
-		}
-
-		if (got_packet) 
-		{
-			printf("Flush Encoder: Succeed to encode 1 frame!\tsize:%5d\n", pkt.size);
-
-#if VIDEO_SAVE_H264
-			FILE *fpH264File = fopen(szOutputFile, "ab+");
-
-			fwrite(pkt.data, 1, pkt.size, fpH264File);
-
-			if (fpH264File)
-			{
-				fclose(fpH264File);
-				fpH264File = NULL;
-			}
-#endif
-			/*int nPos = g_oPxBufferPool.GetEmptyBufferPos();
-			memcpy(g_vlpBufferPool[nPos].lpBuffer, pkt.data, pkt.size);
-			g_vlpBufferPool[nPos].nDataLength = pkt.size;
-
-			g_qCodedBufferList.push(g_vlpBufferPool[nPos]);*/
-
-			timeval tvTimestamp;
-			gettimeofday(&tvTimestamp, NULL);
-
-
-#if DEBUG_VIDEO_TIME_ANALYZE
-			UINT64 ui64TimeStamp = ((UINT64)tvTimestamp.tv_sec) * 1000 + tvTimestamp.tv_usec / 1000;
-
-			ZeroMemory(szMsgBuffer, 1024);
-			sprintf_s(szMsgBuffer, 1024, "Video timestamp: %I64u, Delta:%I64u", ui64TimeStamp, ui64TimeStamp - ui64LastVideTimeStamp);
-			OutputDebugStringA(szMsgBuffer);
-			ui64LastVideTimeStamp = ui64TimeStamp;
-#endif
-
-			/*tvTimestamp.tv_sec = 0;
-			tvTimestamp.tv_usec = 0;*/
-			/*int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
-			g_oCodedBufferPool.SetBufferAt(nPos, kePxMediaType_Video, pkt.data, pkt.size, tvTimestamp);
-			g_qCodedBufferList.push(g_vCodedBufferPool[nPos]);*/
-
-			int nNALType = 0;
-
-			if (pkt.size > 5)
-			{
-				if (AV_RB32(pkt.data) == 0x00000001)	
-				{
-					nNALType = pkt.data[4] & 0x1F;
-				}
-				else if (AV_RB24(pkt.data) == 0x000001)
-				{
-					nNALType = pkt.data[3] & 0x1F;
-				}
-
-				if (5 == nNALType
-					||
-					7 == nNALType
-					||
-					8 == nNALType)
-				{
-					sTempBuffer.bVideoKeyFrame = true;
-				}
-				else
-				{
-					sTempBuffer.bVideoKeyFrame = false;
-				}
-			}
-
-			sTempBuffer.lpBuffer    = pkt.data;
-			sTempBuffer.nDataLength = pkt.size;
-			sTempBuffer.eMediaType  = kePxMediaType_Video;
-			sTempBuffer.tvTimestamp = tvTimestamp;
-
-			int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
-			g_oCodedBufferPool.SetBufferAt(nPos, &sTempBuffer);
-			//g_qCodedBufferList.push(g_vCodedBufferPool[nPos]);
-
-			SPxBuffer *psPxBuffer = g_oCodedBufferPool.GetBufferAt(nPos);
-			if (NULL != psPxBuffer)
-			{
-				g_oCodedQueueBuffer.Push(psPxBuffer);
-			}
-
-			av_free_packet(&pkt);	
-
-			nVideoFrameCnt++;
-		}
-	}
-
-	/*if (fpH264File)
-	{
-		fclose(fpH264File);
-		fpH264File = NULL;
-	}*/
-	
-	avcodec_close(pCodecCtx);
-	av_free(pCodecCtx);
-	//av_freep(&pFrame->data[0]);
-	av_frame_free(&pFrame);
-
-	int nH264KB = nH264BytesCount / 1024.0;
-	int nH264MB = nH264KB         / 1024.0;
-
-	g_bVideoDataFinished = true;
-
-	return 0;
-}
-
 bool CPxScreenLiveStreamingDlg::Init()
 {
 	/*int nScreenWidth  = GetSystemMetrics(SM_CXSCREEN);
 	int nScreenHeight = GetSystemMetrics(SM_CYSCREEN);*/
 
-	int nFps = 25;
-	m_nFps = nFps;
-	m_fPeriod =  1000.0 / nFps;
-	//m_nMode = nMode;
 	QueryPerformanceFrequency(&m_liPerfFreq);
 
-	// 
-	//CDC *pDC = CDC::FromHandle(::GetDC(NULL));         // 获取当前整个屏幕DC
-	//int BitPerPixel = pDC->GetDeviceCaps(BITSPIXEL); // 获得颜色模式
-	//int Width = pDC->GetDeviceCaps(HORZRES);
-	//int Height = pDC->GetDeviceCaps(VERTRES);
-
-	//CDC memDC;                                       // 内存DC
-	//memDC.CreateCompatibleDC(pDC);
-
-	//CBitmap memBitmap, *oldmemBitmap;                // 建立和屏幕兼容的bitmap
-	//memBitmap.CreateCompatibleBitmap(pDC, nScreenWidth, nScreenHeight);
-
-	//oldmemBitmap = memDC.SelectObject(&memBitmap);   // 将memBitmap选入内存DC
-	//memDC.BitBlt(0, 0, nScreenHeight, nScreenHeight, pDC, 0, 0, SRCCOPY);//复制屏幕图像到内存DC
-
-	/*m_hDesktopWnd = ::GetDesktopWindow();
-
-	m_hScreenDC = ::GetDC(m_hDesktopWnd);
-	m_hMemDC = CreateCompatibleDC(m_hScreenDC);
-
-	m_hCompatibleBitmap = CreateCompatibleBitmap(m_hScreenDC, nScreenWidth, nScreenHeight); 
-	SelectObject(m_hMemDC, m_hCompatibleBitmap);*/
-
-	/*CDC **/
 	pDC = CDC::FromHandle(::GetDC(NULL));         // 获取当前整个屏幕DC
-	//int BitPerPixel = pDC->GetDeviceCaps(BITSPIXEL); // 获得颜色模式
 	int Width = pDC->GetDeviceCaps(HORZRES);
 	int Height = pDC->GetDeviceCaps(VERTRES);
 
@@ -772,8 +225,6 @@ bool CPxScreenLiveStreamingDlg::Init()
 
 	/*oldmemBitmap = */
 	memDC.SelectObject(&memBitmap);   // 将memBitmap选入内存DC
-
-	//memDC.BitBlt(0, 0, Width, Height, pDC, 0, 0, SRCCOPY);//复制屏幕图像到内存DC
 
 	// 保存memDC中的位图到文件
 	BITMAP bmp;
@@ -816,41 +267,470 @@ bool CPxScreenLiveStreamingDlg::Init()
 		return false;
 	}
 
-	m_nUOffset = m_nScreenWidth*m_nScreenHeight;
-	m_nVOffset = m_nUOffset+m_nUOffset/4;
+	m_nUOffset = m_nScreenWidth * m_nScreenHeight;
+	m_nVOffset = m_nUOffset + m_nUOffset / 4;
 
 	return true;
 }
 
-// 回调函数
-/*static */DWORD CALLBACK MicrophoneCallback(  
-	HWAVEIN hWaveIn,  // 声音输入设备句柄  
-	UINT  uMsg,       // 产生的消息，由系统给出
-	DWORD dwInstance, // 在waveinopen中给出要传递给该函数的数据  
-	DWORD dwParam1,   
-	DWORD dwParam2);  
+void CPxScreenLiveStreamingDlg::OnStartRecord()
+{
+	g_bStop             = false;
 
+	DWORD dwVideoCaptureThreadId = 0;
+	DWORD dwVideoEncoderThreadId = 0;
+	DWORD dwAudioCaptureThreadId = 0;
+	DWORD dwAudioEncoderThreadId = 0;
+	DWORD dwRecordThreadId       = 0;
+
+	HANDLE hVideoCaptureThread = CreateThread(NULL, NULL, ThreadVideoCapture, this, 0, &dwVideoCaptureThreadId);
+	HANDLE hVideoEncodeThread  = CreateThread(NULL, NULL, ThreadVideoEncoder, this, 0, &dwVideoEncoderThreadId);
+	HANDLE hAudioCaptureThread = CreateThread(NULL, NULL, ThreadAudioCapture, this, 0, &dwAudioCaptureThreadId);
+	HANDLE hAudioEncodeThread  = CreateThread(NULL, NULL, ThreadAudioEncoder, this, 0, &dwAudioEncoderThreadId);
+	HANDLE hRecordThread       = CreateThread(NULL, NULL, ThreadFlvRecorder,  this, 0, &dwRecordThreadId);
+}
+
+void CPxScreenLiveStreamingDlg::OnStopRecord()
+{
+	g_bStop = true;
+}
+
+DWORD WINAPI ThreadVideoCapture(LPVOID lp)
+{
+	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
+
+	g_bVideoCaptureDone = false;
+
+	UINT64 ui64LastVideoTs = 0;
+
+	char szMsgBuffer[1024] = {0};
+
+	// 理论的视频时间戳差值
+	const int DELTA_TIME_DURATION = 1000.0 / DEFAULT_VIDEO_FRAMERATE;
+
+	SPxBuffer *psYUVBuffer = NULL;
+
+	int nFrameCnt = 0;
+
+	UINT64 ui64BaseCaptureTs = GetCurrentTimestamp();
+
+	while (true)
+	{
+		if (g_bStop)
+		{
+			break;
+		}
+
+		// Adjust timestamp
+		/*********************************************************************************/
+		/*ZeroMemory(szMsgBuffer, 1024);
+		sprintf_s(szMsgBuffer, 1024, 
+			"ThreadVideoCapture nFrameCnt:%d, DELTA_TIME_DURATION:%d, %d \n", 
+			nFrameCnt, DELTA_TIME_DURATION, (nFrameCnt * DELTA_TIME_DURATION));
+		OutputDebugStringA(szMsgBuffer);*/
+
+
+		UINT64 ui64Timestamp = nFrameCnt * DELTA_TIME_DURATION;
+		UINT64 ui64CurrentTs = GetCurrentTimestamp();
+
+		INT64 nDelta = ui64Timestamp - (ui64CurrentTs - ui64BaseCaptureTs);
+
+		while (nDelta > 0)
+		{
+			Sleep(1);
+			ui64CurrentTs = GetCurrentTimestamp();
+			nDelta = ui64Timestamp - (ui64CurrentTs - ui64BaseCaptureTs);
+
+			/*ZeroMemory(szMsgBuffer, 1024);
+			sprintf_s(szMsgBuffer, 1024, "ThreadVideoCapture nDelta:%I64d\n", nDelta);
+			OutputDebugStringA(szMsgBuffer);*/
+		}
+
+		/*UINT64 ui64StartCaptureTs = GetCurrentTimestamp();
+		if (0 == ui64LastVideoTs)
+		{
+			ui64LastVideoTs = ui64StartCaptureTs;
+		}
+
+		INT64 i64DeltaTs = ui64StartCaptureTs - ui64LastVideoTs;
+
+		ZeroMemory(szMsgBuffer, 1024);
+		sprintf_s(szMsgBuffer, 1024, 
+			      "ThreadVideoCapture StartCaptureTs:%I64u, LastVideoTs:%I64u, i64DeltaTs:%I64d\n", 
+				  ui64StartCaptureTs, 
+				  ui64LastVideoTs, 
+				  i64DeltaTs);
+		OutputDebugStringA(szMsgBuffer);
+
+		ui64LastVideoTs = ui64StartCaptureTs;*/
+
+		nFrameCnt++;
+		/*********************************************************************************/
+
+		// test unit #1 begin
+		/*CString strCurTime = CTime::GetCurrentTime().Format("%Y-%m-%d %H:%M:%S");
+		OutputDebugStringA(strCurTime);
+		Sleep(1000);*/
+		// test unit #1 end
+
+		// S1: capture screen in rgb format
+
+#if DEBUG_VIDEO_TIME_ANALYZE
+		UINT64 ui64Start = GetCurrentTimestamp();
+#endif 
+
+		timeval tvTimestamp;
+		gettimeofday(&tvTimestamp, NULL);
+
+		pDlg->memDC.BitBlt(0, 0, pDlg->m_nScreenWidth, pDlg->m_nScreenHeight, pDlg->pDC, 0, 0, SRCCOPY);//复制屏幕图像到内存DC
+
+		GetDIBits(pDlg->memDC.m_hDC, 
+			     (HBITMAP) pDlg->memBitmap.m_hObject, 
+				 0, 
+				 pDlg->m_nScreenHeight, 
+				 pDlg->m_pBitmapBuffer, 
+				(LPBITMAPINFO) &pDlg->m_BitmapInfoHeader, 
+				DIB_RGB_COLORS);            // 获取位图数据
+
+#if DEBUG_VIDEO_TIME_ANALYZE
+		UINT64 ui64BMPDone = GetCurrentTimestamp();
+
+		ZeroMemory(szMsgBuffer, 1024);
+		sprintf_s(szMsgBuffer, 1024, "BMP: %I64u ms", ui64BMPDone - ui64Start);
+		OutputDebugStringA(szMsgBuffer);
+#endif
+		// test unit begin #2 : 
+		// to check the capure result,
+		// save it to a bmp file
+#if VIDEO_SAVE_BMP
+		CString strCurTime = CTime::GetCurrentTime().Format("_%Y-%m-%d_%H-%M-%S");
+		CString strBmpFileName = ".\\" + strCurTime + ".bmp";
+
+		FILE *fp = fopen(strBmpFileName, "w+b");
+		if (NULL == fp)
+		{
+			Sleep(1);
+
+			continue;
+		}
+
+		fwrite(&pDlg->m_BitmapFileHeader, 1, sizeof(BITMAPFILEHEADER), fp); // 写入位图文件头
+		fwrite(&pDlg->m_BitmapInfoHeader, 1, sizeof(BITMAPINFOHEADER), fp); // 写入位图信息头
+
+		fwrite(pDlg->m_pBitmapBuffer, 1, pDlg->m_nBitmapBufferLen, fp);   // 写入位图数据
+
+		if (fp)
+		{
+			fclose(fp);
+			fp = NULL;
+		}
+	
+#endif
+		// test unit end #2
+
+		// S2: rgb to yuv420p
+		rgb32_to_yv12_mmx((unsigned char *)pDlg->m_pYUVBuffer, 
+			(unsigned char *)(pDlg->m_pYUVBuffer+pDlg->m_nUOffset), 
+			(unsigned char *)(pDlg->m_pYUVBuffer+pDlg->m_nVOffset),
+			(unsigned char *)pDlg->m_pBitmapBuffer, 
+			pDlg->m_nScreenWidth, 
+			pDlg->m_nScreenHeight, 
+			pDlg->m_nScreenWidth);
+
+#if DEBUG_VIDEO_TIME_ANALYZE
+		UINT64 ui64YUVDone = GetCurrentTimestamp();
+
+		ZeroMemory(szMsgBuffer, 1024);
+		sprintf_s(szMsgBuffer, 1024, "YUV: %I64u ms", ui64YUVDone - ui64BMPDone);
+		OutputDebugStringA(szMsgBuffer);
+#endif 
+
+		// test unit #3 begin
+		// check the yuv
+#if VIDEO_SAVE_YUV
+		g_WriteFile("output.yuv", pDlg->m_pYUVBuffer, pDlg->m_nYUVBufferSize);
+#endif
+		// test unit #3 end
+
+		psYUVBuffer = g_oYUVBufferPool.GetBufferAt(g_oYUVBufferPool.GetEmptyBufferPos());
+		psYUVBuffer->eMediaType    = kePxMediaType_Video;
+		psYUVBuffer->nDataLength   = pDlg->m_nYUVBufferSize;
+		psYUVBuffer->ui64Timestamp = ui64Timestamp;
+		memcpy(psYUVBuffer->lpBuffer, pDlg->m_pYUVBuffer, pDlg->m_nYUVBufferSize);
+
+		// add the video encoded buffer to video buffer list
+		g_oYUVQueueBuffer.Push(psYUVBuffer);	
+	}
+
+	g_bVideoCaptureDone = true;
+
+	return 0;
+}
+
+DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
+{
+	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
+
+	g_bVideoEncodeDone = false;
+
+	const int DELTA_TIME_DURATION = 1000.0 / DEFAULT_VIDEO_FRAMERATE;
+
+	int nH264BytesCount = 0;
+
+	AVCodec        *pCodec    = NULL;
+	AVCodecContext *pCodecCtx = NULL;
+
+	int nRet;
+
+	AVFrame *pFrame = NULL;
+	AVPacket pkt;
+
+	AVCodecID codec_id = AV_CODEC_ID_H264;
+
+	avcodec_register_all();
+
+	pCodec = avcodec_find_encoder(codec_id);
+	if (!pCodec) 
+	{
+		printf("Codec not found\n");
+		return -1;
+	}
+
+	pCodecCtx = avcodec_alloc_context3(pCodec);
+	if (!pCodecCtx) 
+	{
+		printf("Could not allocate video codec context\n");
+		return -1;
+	}
+
+	pCodecCtx->bit_rate       = 1024*1024;
+	/*pCodecCtx->rc_max_rate    = 1024*1024;
+	pCodecCtx->rc_min_rate    = 1024*1024;
+	pCodecCtx->rc_buffer_size = 1024*1024;*/
+
+	pCodecCtx->width         = pDlg->m_nScreenWidth;
+	pCodecCtx->height        = pDlg->m_nScreenHeight;
+	pCodecCtx->time_base.num = 1;
+	pCodecCtx->time_base.den = DEFAULT_VIDEO_FRAMERATE;
+	pCodecCtx->gop_size      = DEFAULT_VIDEO_FRAMERATE;
+	pCodecCtx->max_b_frames  = 1;
+	pCodecCtx->pix_fmt       = AV_PIX_FMT_YUV420P;
+
+	if (codec_id == AV_CODEC_ID_H264)
+	{
+		av_opt_set(pCodecCtx->priv_data, "preset", "slow", 0);
+	}
+
+	if (avcodec_open2(pCodecCtx, pCodec, NULL) < 0) 
+	{
+		printf("Could not open codec\n");
+
+		return -1;
+	}
+
+	pFrame = av_frame_alloc();
+	if (!pFrame) 
+	{
+		printf("Could not allocate video frame\n");
+		return -1;
+	}
+
+	int nPictureSize = avpicture_get_size(pCodecCtx->pix_fmt, 
+							          pCodecCtx->width, 
+									  pCodecCtx->height);
+
+	uint8_t* picture_buf = (uint8_t *)av_malloc(nPictureSize);
+	avpicture_fill((AVPicture *)pFrame, 
+		           picture_buf, 
+				   pCodecCtx->pix_fmt, 
+		           pCodecCtx->width, 
+				   pCodecCtx->height);
+
+	int nVideoFrameCnt = 0;
+	int got_packet     = 0;
+
+	SPxBuffer sTempBuffer;
+
+	char szH264OutputFile[256] = "output.h264";
+
+
+	int nEncodeFrameCnt = 0;
+
+	while (true)
+	{
+		if (g_bVideoCaptureDone && (0 == g_oYUVQueueBuffer.Size()))
+		{
+			break;
+		}
+
+		while (!g_oYUVQueueBuffer.IsEmpty())
+		{
+			SPxBuffer *psPxBuffer = g_oYUVQueueBuffer.Front();
+			if (NULL == psPxBuffer->lpBuffer)
+			{
+				Sleep(1);
+
+				continue;
+			}
+
+#if VIDEO_SAVE_YUV_FROM_BUFFERLIST
+			g_WriteFile("output_v2.yuv", psPxBuffer->lpBuffer, psPxBuffer->nDataLength);
+#endif
+
+			// S3: encode yuv420p
+			pFrame->data[0] = psPxBuffer->lpBuffer;                     // Y
+			pFrame->data[1] = psPxBuffer->lpBuffer + pDlg->m_nUOffset;  // U 
+			pFrame->data[2] = psPxBuffer->lpBuffer + pDlg->m_nVOffset;  // V
+
+			av_init_packet(&pkt);
+			pkt.data = NULL;    // packet data will be allocated by the encoder
+			pkt.size = 0;
+
+			pFrame->pts= psPxBuffer->ui64Timestamp;
+
+			/* encode the image */
+			nRet = avcodec_encode_video2(pCodecCtx, &pkt, pFrame, &got_packet);
+			if (nRet < 0) 
+			{
+				printf("Error encoding frame\n");
+				return -1;
+			}
+
+			if (got_packet) 
+			{
+				if (pkt.size > 0)
+				{
+					printf("Succeed to encode frame: %5d\tsize:%5d\n", nVideoFrameCnt, pkt.size);
+
+					nH264BytesCount += pkt.size;
+
+#if VIDEO_SAVE_H264
+					g_WriteFile(szH264OutputFile, pkt.data, pkt.size);
+#endif
+
+#if DEBUG_VIDEO_TIME_ANALYZE
+					UINT64 ui64H264Done = GetCurrentTimestamp();
+					ZeroMemory(szMsgBuffer, 1024);
+					sprintf_s(szMsgBuffer, 1024, "264: %I64u ms", ui64H264Done - ui64YUVDone);
+					OutputDebugStringA(szMsgBuffer);
+#endif
+				
+					if (pkt.size > 5)
+					{
+						sTempBuffer.bVideoKeyFrame = g_IsKeyFrame(pkt.data, pkt.size);
+					}
+
+					sTempBuffer.lpBuffer      = pkt.data;
+					sTempBuffer.nDataLength   = pkt.size;
+					sTempBuffer.eMediaType    = kePxMediaType_Video;
+					sTempBuffer.ui64Timestamp = nEncodeFrameCnt * DELTA_TIME_DURATION;
+
+					int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
+					g_oCodedBufferPool.SetBufferAt(nPos, &sTempBuffer);
+
+					SPxBuffer *psPxBuffer = g_oCodedBufferPool.GetBufferAt(nPos);
+					if (NULL != psPxBuffer)
+					{
+						g_oCodedQueueBuffer.Push(psPxBuffer);
+					}
+
+					av_free_packet(&pkt);
+
+					nEncodeFrameCnt++;
+				}  
+			}
+
+			g_oYUVQueueBuffer.Pop();
+		}
+
+		Sleep(1);
+	}
+
+	got_packet = 1;
+	while (got_packet)
+	{
+		nRet = avcodec_encode_video2(pCodecCtx, &pkt, NULL, &got_packet);
+		if (nRet < 0) 
+		{
+			printf("Error encoding frame\n");
+
+			return -1;
+		}
+
+		if (got_packet) 
+		{
+			printf("Flush Encoder: Succeed to encode 1 frame!\tsize:%5d\n", pkt.size);
+
+#if VIDEO_SAVE_H264
+			g_WriteFile(szH264OutputFile, pkt.data, pkt.size);
+#endif
+
+			timeval tvTimestamp;
+			gettimeofday(&tvTimestamp, NULL);
+
+			int nNALType = 0;
+
+			if (pkt.size > 5)
+			{
+				sTempBuffer.bVideoKeyFrame = g_IsKeyFrame(pkt.data, pkt.size);
+			}
+
+			sTempBuffer.lpBuffer      = pkt.data;
+			sTempBuffer.nDataLength   = pkt.size;
+			sTempBuffer.eMediaType    = kePxMediaType_Video;
+			sTempBuffer.ui64Timestamp = nEncodeFrameCnt * DELTA_TIME_DURATION;
+
+			int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
+			g_oCodedBufferPool.SetBufferAt(nPos, &sTempBuffer);
+
+			SPxBuffer *psPxBuffer = g_oCodedBufferPool.GetBufferAt(nPos);
+			if (NULL != psPxBuffer)
+			{
+				g_oCodedQueueBuffer.Push(psPxBuffer);
+			}
+
+			av_free_packet(&pkt);	
+
+			nEncodeFrameCnt++;
+		}
+	}
+
+
+	avcodec_close(pCodecCtx);
+	av_free(pCodecCtx);
+	//av_freep(&pFrame->data[0]);
+	av_frame_free(&pFrame);
+
+	int nH264KB = nH264BytesCount / 1024.0;
+	int nH264MB = nH264KB         / 1024.0;
+
+	g_bVideoEncodeDone = true;
+
+	return 0;
+}
 
 DWORD WINAPI ThreadAudioCapture(LPVOID lp)
 {
 	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
+
+	g_bAudioCaptureDone = false;
 
 	HWAVEIN  hWaveIn  = NULL;
 
 	memset(&g_sWaveFormat,0,sizeof(WAVEFORMATEX));   
 
 	g_sWaveFormat.wFormatTag      = WAVE_FORMAT_PCM;  
-	g_sWaveFormat.nChannels       = 1;  
+	g_sWaveFormat.nChannels       = 1;  // 声道数 1：单声道 2：双声道
 	g_sWaveFormat.wBitsPerSample  = 16;  
-	g_sWaveFormat.nSamplesPerSec  = 44100L;
+	g_sWaveFormat.nSamplesPerSec  = AUDIO_SAMPLE_PER_SECOND;
 
 	/*
 	 If wFormatTag = WAVE_FORMAT_PCM, 
 	 set nBlockAlign to (nChannels*wBitsPerSample)/8, 
 	 which is the size of a single audio frame.
 	*/
-	g_sWaveFormat.nBlockAlign     = g_sWaveFormat.nChannels * g_sWaveFormat.wBitsPerSample / 8; 
-	g_sWaveFormat.nAvgBytesPerSec = 88200;  
+	g_sWaveFormat.nBlockAlign     = g_sWaveFormat.nChannels   * g_sWaveFormat.wBitsPerSample / 8; 
+	g_sWaveFormat.nAvgBytesPerSec = g_sWaveFormat.nBlockAlign * g_sWaveFormat.nSamplesPerSec;  
 	g_sWaveFormat.cbSize          = 0;
 
 	int nAudioSampleCount  = 0;
@@ -895,10 +775,9 @@ DWORD WINAPI ThreadAudioCapture(LPVOID lp)
 		}
 
 		// test sample count begin
-		sprintf_s(szMsgBuffer, 1024, "ThreadAudioEncoder nAudioSampleCount:%d\n", nAudioSampleCount);
-		OutputDebugStringA(szMsgBuffer);
+		/*sprintf_s(szMsgBuffer, 1024, "ThreadAudioEncoder nAudioSampleCount:%d\n", nAudioSampleCount);
+		OutputDebugStringA(szMsgBuffer);*/
 
-		//Sleep(1000);
 		nAudioSampleCount++;
 		// test sample count end
 
@@ -912,50 +791,91 @@ DWORD WINAPI ThreadAudioCapture(LPVOID lp)
 		wHdr1.dwFlags         = 0;
 		wHdr1.dwLoops         = 1;
 
-		waveInPrepareHeader(hWaveIn, &wHdr1, sizeof(WAVEHDR));//准备一个波形数据块头用于录音
-		waveInAddBuffer(hWaveIn,     &wHdr1, sizeof(WAVEHDR));//指定波形数据块为录音输入缓存
+		waveInPrepareHeader(hWaveIn, &wHdr1, sizeof(WAVEHDR));//准备一个波形数据块头用于录音, 将音频数据块准备给音频输入设备使用
+		waveInAddBuffer(hWaveIn,     &wHdr1, sizeof(WAVEHDR));//指定波形数据块为录音输入缓存, 将音频数据块发送给音频驱动程序
 
 		// Capture the audio of microphone (PCM Format) 
 		// and get the timeval (to calculate the timestamp)
 		waveInStart(hWaveIn);//开始录音
 
-		Sleep(1000);//等待声音录制1s
+		Sleep(200);//等待声音录制1s
 
 		waveInReset(hWaveIn);//停止录音
 
 		psPCMBuffer->nDataLength = wHdr1.dwBytesRecorded;
-		gettimeofday(&psPCMBuffer->tvTimestamp, NULL);
+		psPCMBuffer->ui64Timestamp = 0;
 
 		g_oPCMQueueBuffer.Push(psPCMBuffer);
 
 #if AUDIO_SAVE_PCM
-		FILE *pf = NULL;
-
-		//fopen_s(&pf, "output.pcm", "wb");
-		fopen_s(&pf, "output.pcm", "ab");
-
-		fwrite(psPCMBuffer->lpBuffer, 1, wHdr1.dwBytesRecorded, pf);
+		g_WriteFile("output.pcm", psPCMBuffer->lpBuffer, wHdr1.dwBytesRecorded);
 
 		ZeroMemory(szMsgBuffer, 1024);
 		sprintf_s(szMsgBuffer, 1024, "dwBytesRecorded:%lu\n", wHdr1.dwBytesRecorded);
 		OutputDebugStringA(szMsgBuffer);
-
-		if (pf)
-		{
-			fclose(pf);
-			pf = NULL;
-		}
 #endif
 	}
 
 	::waveInClose(hWaveIn);
 
+	g_bAudioCaptureDone = true;
+
 	return 0;
-}
+} 
+
+DWORD CALLBACK MicrophoneCallback(HWAVEIN hwavein, UINT uMsg, DWORD dwInstance, DWORD dwParam1, DWORD dwParam2)  
+{  
+	//这个CIMAADPCMDlg就是你的音频采集类  
+	CPxScreenLiveStreamingDlg *pWnd = (CPxScreenLiveStreamingDlg*)dwInstance;
+
+	switch(uMsg)   
+	{  
+	case WIM_OPEN:
+#if DEBUG_AUDIO_CAPTURE_PCM
+		OutputDebugStringA("WIM_OPEN\n"); 
+#endif 
+		break;  
+
+	case WIM_DATA: 
+#if DEBUG_AUDIO_CAPTURE_PCM
+		OutputDebugStringA("WIM_DATA\n"); 
+#endif
+		//这里就是对采集到的数据做处理的地方，我是做了发送处理  
+		//((PWAVEHDR)dwParam1)->lpData这就是采集到的数据指针  
+		//((PWAVEHDR)dwParam1)->dwBytesRecorded这就是采集到的数据长度  
+		//re = send(pWnd->sends,((PWAVEHDR)dwParam1)->lpData,((PWAVEHDR)dwParam1)->dwBytesRecorded,0);  
+		//处理完了之后还要再把这个缓冲数组加回去  
+		//pWnd->win代表是否继续采集，因为当停止采集的时候，只有当所有的  
+		//缓冲数组都腾出来之后才能close，所以需要停止采集时就不要再waveInAddBuffer了  
+		/*if(pWnd->win)  
+			waveInAddBuffer (hwavein, (PWAVEHDR) dwParam1, sizeof (WAVEHDR)) ;  
+		TRACE("%d\n",re); */
+
+		char szMsgBuffer[1024];
+		sprintf_s(szMsgBuffer, 1024, "MicrophoneCallback dwBytesRecorded:%lu\n", ((PWAVEHDR)dwParam1)->dwBytesRecorded );
+		//OutputDebugStringA(szMsgBuffer);
+
+		break;  
+
+	case WIM_CLOSE: 
+#if DEBUG_AUDIO_CAPTURE_PCM
+		OutputDebugStringA("WIM_CLOSE\n");  
+#endif
+
+		break;  
+
+	default:  
+		break;  
+	}  
+
+	return 0;  
+} 
 
 DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 {
 	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
+
+	g_bAudioEncodeDone = false;
 
 	AVCodec        *pCodec    = NULL;
 	AVCodecContext *pCodecCtx = NULL;
@@ -993,7 +913,7 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 	pCodecCtx->codec_id       = nCodecId;
 	pCodecCtx->codec_type     = AVMEDIA_TYPE_AUDIO;
 	pCodecCtx->sample_fmt     = AV_SAMPLE_FMT_S16;
-	pCodecCtx->sample_rate    = 44100;
+	pCodecCtx->sample_rate    = AUDIO_SAMPLE_PER_SECOND;
 	pCodecCtx->channel_layout = AV_CH_LAYOUT_MONO;
 	//pCodecCtx->channel_layout=AV_CH_LAYOUT_STEREO;
 	pCodecCtx->channels       = av_get_channel_layout_nb_channels(pCodecCtx->channel_layout);
@@ -1028,15 +948,26 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 	pkt.data = NULL;    // packet data will be allocated by the encoder
 	pkt.size = 0;
 
+	double AUDIO_DELTA_TIME_DURATION = 1024 * 1000.0 / pCodecCtx->sample_rate;
+
 	char szMsgBuffer[1024] = {0};
 	ZeroMemory(szMsgBuffer, 1024);
-	sprintf_s(szMsgBuffer, 1024, "size: %d", size);
+	sprintf_s(szMsgBuffer, 1024, "size: %d, DELTA_TIME_DURATION:%.2f", size, AUDIO_DELTA_TIME_DURATION);
 	OutputDebugStringA(szMsgBuffer);
 
 	int nPosInFrameBuffer = 0;
 
+	SPxBuffer sTempBuffer;
+
+	int nAudioFrameCnt = 0;
+
 	while (true)
 	{
+		if (g_bAudioCaptureDone && (0 == g_oPCMQueueBuffer.Size()))
+		{
+			break;
+		}
+
 		while (!g_oPCMQueueBuffer.IsEmpty())
 		{
 			SPxBuffer *psPxBuffer = g_oPCMQueueBuffer.Front();
@@ -1048,18 +979,10 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 			}
 
 #if AUDIO_SAVE_PCM_FROM_BUFFERLIST
-			FILE *fpPCMFile = fopen("output_v2.pcm", "ab+");
-
-			fwrite(psPxBuffer->lpBuffer, 1, psPxBuffer->nDataLength, fpPCMFile);
-
-			if (fpPCMFile)
-			{
-				fclose(fpPCMFile);
-				fpPCMFile = NULL;
-			}
+			g_WriteFile("output_v2.pcm", psPxBuffer->lpBuffer, psPxBuffer->nDataLength);
 
 			ZeroMemory(szMsgBuffer, 1024);
-			sprintf_s(szMsgBuffer, 1024, "psPxBuffer->nDataLength: %d", psPxBuffer->nDataLength);
+			sprintf_s(szMsgBuffer, 1024, "psPxBuffer->nDataLength: %d\n", psPxBuffer->nDataLength);
 			OutputDebugStringA(szMsgBuffer);
 #endif
 			int nPosInPCMBuffer  = 0;
@@ -1075,8 +998,8 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 						   nBytesNeeded);
 
 					ZeroMemory(szMsgBuffer, 1024);
-					sprintf_s(szMsgBuffer, 1024, "memcpy nBytesNeeded: %d", nBytesNeeded);
-					OutputDebugStringA(szMsgBuffer);
+					sprintf_s(szMsgBuffer, 1024, "memcpy nBytesNeeded: %d\n", nBytesNeeded);
+					//OutputDebugStringA(szMsgBuffer);
 
 					nPosInPCMBuffer   += nBytesNeeded;
 					nPosInFrameBuffer = 0;
@@ -1095,16 +1018,27 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 						printf("Succeed to encode frame: %5d\tsize:%5d\n",nFrameCnt, pkt.size);
 						nFrameCnt++;
 
-						FILE *fpAACFile = fopen(szOutputFileName, "ab");
-						if (fpAACFile)
-						{
-							fwrite(pkt.data, 1, pkt.size, fpAACFile);
+#if AUDIO_SAVE_AAC
+						g_WriteFile(szOutputFileName, pkt.data, pkt.size);
+#endif
 
-							fclose(fpAACFile);
-							fpAACFile = NULL;
+						sTempBuffer.lpBuffer    = pkt.data;
+						sTempBuffer.nDataLength = pkt.size;
+						sTempBuffer.eMediaType  = kePxMediaType_Audio;
+						sTempBuffer.ui64Timestamp = nAudioFrameCnt * AUDIO_DELTA_TIME_DURATION;
+
+						int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
+						g_oCodedBufferPool.SetBufferAt(nPos, &sTempBuffer);
+
+						SPxBuffer *psPxBuffer = g_oCodedBufferPool.GetBufferAt(nPos);
+						if (NULL != psPxBuffer)
+						{
+							g_oCodedQueueBuffer.Push(psPxBuffer);
 						}
 
 						av_free_packet(&pkt);
+
+						nAudioFrameCnt++;
 					}
 				}
 				else
@@ -1115,8 +1049,8 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 					nPosInFrameBuffer = nBytesLeft;
 
 					ZeroMemory(szMsgBuffer, 1024);
-					sprintf_s(szMsgBuffer, 1024, "memcpy nBytesLeft: %d", nBytesLeft);
-					OutputDebugStringA(szMsgBuffer);
+					sprintf_s(szMsgBuffer, 1024, "memcpy nBytesLeft: %d\n", nBytesLeft);
+					//OutputDebugStringA(szMsgBuffer);
 
 					break;
 				}
@@ -1125,7 +1059,7 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 			g_oPCMQueueBuffer.Pop();
 		}
 
-		Sleep(2);
+		Sleep(1);
 	}
 
 	int i = 0;
@@ -1143,15 +1077,27 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 		{
 			printf("Flush Encoder: Succeed to encode 1 frame!\tsize:%5d\n",pkt.size);
 
-			FILE *fpAACFile = fopen(szOutputFileName, "ab");
-			if (fpAACFile)
+#ifdef AUDIO_SAVE_AAC
+			g_WriteFile(szOutputFileName, pkt.data, pkt.size);
+#endif
+
+			sTempBuffer.lpBuffer      = pkt.data;
+			sTempBuffer.nDataLength   = pkt.size;
+			sTempBuffer.eMediaType    = kePxMediaType_Audio;
+			sTempBuffer.ui64Timestamp = nAudioFrameCnt * AUDIO_DELTA_TIME_DURATION;
+
+			int nPos = g_oCodedBufferPool.GetEmptyBufferPos();
+			g_oCodedBufferPool.SetBufferAt(nPos, &sTempBuffer);
+
+			SPxBuffer *psPxBuffer = g_oCodedBufferPool.GetBufferAt(nPos);
+			if (NULL != psPxBuffer)
 			{
-				fwrite(pkt.data, 1, pkt.size, fpAACFile);
-				fclose(fpAACFile);
-				fpAACFile = NULL;
+				g_oCodedQueueBuffer.Push(psPxBuffer);
 			}
 
 			av_free_packet(&pkt);
+
+			nAudioFrameCnt++;
 		}
 	}
 
@@ -1159,51 +1105,88 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 	av_free(pCodecCtx);
 	av_freep(&pFrame->data[0]);
 	av_frame_free(&pFrame);
-	av_free(pui8FrameBuffer);
+
+	/*if (pui8FrameBuffer)
+	{
+		av_free(pui8FrameBuffer);
+	}*/
+
+	g_bAudioEncodeDone = true;
 
 	return 0;
 }
 
-DWORD CALLBACK MicrophoneCallback(HWAVEIN hwavein, UINT uMsg, DWORD dwInstance, DWORD dwParam1, DWORD dwParam2)  
-{  
-	//这个CIMAADPCMDlg就是你的音频采集类  
-	CPxScreenLiveStreamingDlg *pWnd = (CPxScreenLiveStreamingDlg*)dwInstance;
+DWORD WINAPI ThreadFlvRecorder(LPVOID lp)
+{
+	CPxScreenLiveStreamingDlg *pDlg = (CPxScreenLiveStreamingDlg *)lp;
 
-	switch(uMsg)   
-	{  
-	case WIM_OPEN:
-#if DEBUG_AUDIO_CAPTURE_PCM
-		OutputDebugStringA("WIM_OPEN\n"); 
-#endif 
-		break;  
+	CPxFLVRecorder oFLVRecorder;
+	char *szFLVFileName = "output.flv";
+	oFLVRecorder.SetFileName(szFLVFileName);
 
-	case WIM_DATA: 
-#if DEBUG_AUDIO_CAPTURE_PCM
-		OutputDebugStringA("WIM_DATA\n"); 
+	SPxRecordStreamProperty sStreamProperty;
+	sStreamProperty.bHasAudio       = true;
+	sStreamProperty.bHasVideo       = true;
+	sStreamProperty.eVideoType      = keRecordVideoType_H264;
+	sStreamProperty.fVideoFrameRate = DEFAULT_VIDEO_FRAMERATE;
+	sStreamProperty.nVideoWidth     = pDlg->m_nScreenWidth;
+	sStreamProperty.nVideoHeight    = pDlg->m_nScreenHeight;
+	sStreamProperty.eAudioType      = keRecordAudioType_AAC;
+	sStreamProperty.eAudioSamplesPerSecond = keRecordAudioSamples_44100;
+	sStreamProperty.nAudioBitsPerSampleint = 16;
+
+	oFLVRecorder.SetStreamProperty(&sStreamProperty);
+
+	oFLVRecorder.Begin();
+
+	bool bFristVideoArrived = false;
+
+	while(true)
+	{
+		if (g_bAudioEncodeDone && g_bVideoEncodeDone && (0 == g_oCodedQueueBuffer.Size()))
+		{
+			break;
+		}
+
+		while (0 != g_oCodedQueueBuffer.Size())
+		{
+			SPxBuffer *psPxBuffer = g_oCodedQueueBuffer.Front();
+			if (NULL == psPxBuffer->lpBuffer)
+			{
+				Sleep(1);
+
+				continue;
+			}
+
+			if (kePxMediaType_Audio == psPxBuffer->eMediaType)
+			{
+#if AUDIO_SAVE_AAC_FROM_BUFFERLIST
+				g_WriteFile("output_v2.aac", psPxBuffer->lpBuffer, psPxBuffer->nDataLength);
 #endif
-		//这里就是对采集到的数据做处理的地方，我是做了发送处理  
-		//((PWAVEHDR)dwParam1)->lpData这就是采集到的数据指针  
-		//((PWAVEHDR)dwParam1)->dwBytesRecorded这就是采集到的数据长度  
-		//re = send(pWnd->sends,((PWAVEHDR)dwParam1)->lpData,((PWAVEHDR)dwParam1)->dwBytesRecorded,0);  
-		//处理完了之后还要再把这个缓冲数组加回去  
-		//pWnd->win代表是否继续采集，因为当停止采集的时候，只有当所有的  
-		//缓冲数组都腾出来之后才能close，所以需要停止采集时就不要再waveInAddBuffer了  
-		/*if(pWnd->win)  
-			waveInAddBuffer (hwavein, (PWAVEHDR) dwParam1, sizeof (WAVEHDR)) ;  
-		TRACE("%d\n",re); */
 
-		break;  
+				oFLVRecorder.ReceiveAudioData(1, "127.0.0.1", psPxBuffer);
+			}
+			else if (kePxMediaType_Video == psPxBuffer->eMediaType)
+			{
+				if (!bFristVideoArrived)
+				{
+					bFristVideoArrived = true;
+				}
 
-	case WIM_CLOSE: 
-#if DEBUG_AUDIO_CAPTURE_PCM
-		OutputDebugStringA("WIM_CLOSE\n");  
+#if VIDEO_SAVE_H264_FROM_BUFFERLIST
+				g_WriteFile("output_v2.h264", psPxBuffer->lpBuffer, psPxBuffer->nDataLength);
 #endif
+				oFLVRecorder.ReceiveVideoData(2, "127.0.0.1", psPxBuffer);
+			}
 
-		break;  
+			g_oCodedQueueBuffer.Pop();
+		}
 
-	default:  
-		break;  
-	}  
+		Sleep(1);
+	}
 
-	return 0;  
-}  
+	oFLVRecorder.End();
+	oFLVRecorder.Close();
+
+	return 0;
+}

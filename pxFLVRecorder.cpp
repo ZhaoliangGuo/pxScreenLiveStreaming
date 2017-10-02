@@ -5,6 +5,8 @@
 
 CPxFLVRecorder::CPxFLVRecorder(void)
 {
+	m_nLastVideoTimestamp = 0;
+	m_nLastAudioTimestamp = 0;
 }
 
 CPxFLVRecorder::~CPxFLVRecorder(void)
@@ -63,78 +65,32 @@ HRESULT CPxFLVRecorder::SetFileName( char *in_pszFileName )
 //	return hr;
 //}
 //
-//HRESULT __stdcall CPxFLVRecorder::AddFileProperty_StreamProperty(SPxRecordStreamProperty *in_psFileStreamProperty)
-//{
-//	HRESULT hr = NS_NOERROR;
-//	if (in_psFileStreamProperty == NULL)
-//	{
-//		hr = NS_E_INVALID_PARAMETER;
-//		NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-//			"CPxFLVRecorder::AddFileProperty_StreamProperty: NS_E_INVALID_PARAMETER,in_psFileStreamProperty is NULL", true);
-//	}
-//
-//	NsLogNotifyA_Add_file(0,0, 
-//		"CPxFLVRecorder::AddFileProperty_StreamProperty! bHasVideo: %d, bHasAudio:%d, fVideoFrameRate:%d,\n \
-//		nVideoHeight:%d, nVideoWidth:%d, eAudioSamplesPerSecond:%d, nAudioChannels:%d, nAudioBitsPerSampleint:%d.\n",
-//		in_psFileStreamProperty->bHasVideo ? 1 : 0,
-//		in_psFileStreamProperty->bHasAudio ? 1 : 0,
-//		in_psFileStreamProperty->fVideoFrameRate,
-//		in_psFileStreamProperty->nVideoHeight,
-//		in_psFileStreamProperty->nVideoWidth,
-//		in_psFileStreamProperty->eAudioSamplesPerSecond,
-//		in_psFileStreamProperty->nAudioChannels,
-//		in_psFileStreamProperty->nAudioBitsPerSampleint);
-//
-//	m_sFileProperty.aStreamProperty.push_back(*in_psFileStreamProperty);
-//
-//	return hr;
-//}
-//
-//HRESULT __stdcall CPxFLVRecorder::EndSetFileProperty()
-//{
-//	HRESULT hr = NS_NOERROR;
-//
-//	NsLogNotifyA_Add_file(0,0,"CPxFLVRecorder::EndSetFileProperty, BEGIN! ");
-//
-//	hr = m_oPxFLVMuxer->SetFileProperty(&m_sFileProperty);
-//	NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-//		"CPxFLVRecorder::EndSetFileProperty: m_oPxFLVMuxer->SetFileProperty fail!", true);
-//
-//	NsLogNotifyA_Add_file(0,0,"CPxFLVRecorder::EndSetFileProperty, SUCCEEDED! ");
-//
-//	return hr;
-//}
+HRESULT CPxFLVRecorder::SetStreamProperty(SPxRecordStreamProperty *in_psFileStreamProperty)
+{
+	HRESULT hr = NS_NOERROR;
+	if (in_psFileStreamProperty == NULL)
+	{
+		hr = NS_E_INVALID_PARAMETER;
+		/*NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
+			"CPxFLVRecorder::AddFileProperty_StreamProperty: NS_E_INVALID_PARAMETER,in_psFileStreamProperty is NULL", true);*/
+	}
 
-//HRESULT __stdcall CPxFLVRecorder::SetFileProperty(SPxRecordFileProperty *in_psFileProperty)
-//{
-//	HRESULT hr = NS_NOERROR;
-//
-//	NsLogNotifyA_Add_file(0,0,"CPxFLVRecorder::SetFileProperty, BEGIN! ");
-//
-//	ASSERT(false);
-//
-//	if( in_psFileProperty == NULL )
-//	{
-//		hr = NS_E_INVALID_PARAMETER;
-//		NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-//			"CPxFLVRecorder::SetFileProperty: NS_E_INVALID_PARAMETER,in_psFileProperty is NULL", true);
-//	}
-//
-//	hr = m_oPxFLVMuxer->SetFileProperty(in_psFileProperty);
-//	NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-//		"CPxFLVRecorder::SetFileProperty: PX_E_PXFLVRECORDER_SETFILEPROPERTY_ERROR", true);
-//
-//	NsLogNotifyA_Add_file(0,0,"CPxFLVRecorder::SetFileProperty, SUCCEEDED! ");
-//
-//	return hr;
-//}
+	/*NsLogNotifyA_Add_file(0,0, 
+		"CPxFLVRecorder::AddFileProperty_StreamProperty! bHasVideo: %d, bHasAudio:%d, fVideoFrameRate:%d,\n \
+		nVideoHeight:%d, nVideoWidth:%d, eAudioSamplesPerSecond:%d, nAudioChannels:%d, nAudioBitsPerSampleint:%d.\n",
+		in_psFileStreamProperty->bHasVideo ? 1 : 0,
+		in_psFileStreamProperty->bHasAudio ? 1 : 0,
+		in_psFileStreamProperty->fVideoFrameRate,
+		in_psFileStreamProperty->nVideoHeight,
+		in_psFileStreamProperty->nVideoWidth,
+		in_psFileStreamProperty->eAudioSamplesPerSecond,
+		in_psFileStreamProperty->nAudioChannels,
+		in_psFileStreamProperty->nAudioBitsPerSampleint);*/
 
-//HRESULT __stdcall CPxFLVRecorder::SetErrorNotifyInterface(IPxRecordErrorNotify *in_pIErrorNotify)
-//{
-//	HRESULT hr = NS_NOERROR;
-//	m_pJRecordErrorNotify = in_pIErrorNotify;
-//	return hr;
-//}
+	m_oPxFLVMuxer->SetStreamProperty(in_psFileStreamProperty);
+
+	return hr;
+}
 
 HRESULT CPxFLVRecorder::Begin()
 {
@@ -146,12 +102,6 @@ HRESULT CPxFLVRecorder::Begin()
 
 	return hr;
 }
-
-//HRESULT CPxFLVRecorder::ReceiveVideoData(
-//	int in_nStreamID,
-//	char *pchIP,
-//	INsdMediaChunk *in_pIMC
-//	)
 
 HRESULT CPxFLVRecorder::ReceiveVideoData(
 	int in_nStreamID,
@@ -182,39 +132,26 @@ HRESULT CPxFLVRecorder::ReceiveVideoData(
 			"CPxFLVRecorder::ReceiveVideoData: NS_E_INVALID_PARAMETER, in_pIMC == NULL", true);
 	}	*/
 
-	/*unsigned char *pBuffer = NULL;
-	hr = in_pIMC ->GetDataPointer(&pBuffer);
-	NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-		"CPxFLVRecorder::ReceiveVideoData: NS_E_INVALID_PARAMETER,GetDataPointer error", true);
+	int nTimeStamp = static_cast <int> (in_pIMC->ui64Timestamp);
 
-	unsigned long ulDataBufferSize = 0;
-	hr = in_pIMC->GetDataBufferSize(&ulDataBufferSize);
-	NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-		"CPxFLVRecorder::ReceiveVideoData: NS_E_INVALID_PARAMETER,GetDataBufferSize error", true);
+	if (0 == m_nLastVideoTimestamp)
+	{
+		m_nLastVideoTimestamp = nTimeStamp;
+	} 
 
-	bool bIsFrame = false;
-	hr = in_pIMC->GetIsIFrame(&bIsFrame);
-	NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-		"CPxFLVRecorder::ReceiveVideoData: NS_E_INVALID_PARAMETER,GetIsIFrame error", true);
+	int nDeltaTs = nTimeStamp - m_nLastVideoTimestamp;
 
-	long lTimeStamp = 0;
-	hr = in_pIMC->GetTimeStamp(&lTimeStamp);
-	NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-		"CPxFLVRecorder::ReceiveVideoData: NS_E_INVALID_PARAMETER,GetTimeStamp error", true);*/
-
-	bool bIsFrame = false;
-
-	long lTimeStamp = (in_pIMC->tvTimestamp.tv_sec * 1000 + in_pIMC->tvTimestamp.tv_usec / 1000);
+	char szMsgBuffer[1024] = {0};
+	sprintf_s(szMsgBuffer, 1024, "CPxFLVRecorder::ReceiveVideoData timestamp: %d, VideoTimestamp:%d, nDeltaTs: %d ms\n", nTimeStamp, m_nLastVideoTimestamp, nDeltaTs);
+	OutputDebugStringA(szMsgBuffer);
 
 	hr = m_oPxFLVMuxer->WriteVideoSample(in_nStreamID, 
 	in_pIMC->lpBuffer,
 	in_pIMC->nDataLength,
 	in_pIMC->bVideoKeyFrame, 
-	static_cast<int> (lTimeStamp));
+	nTimeStamp);
 
-
-	/*NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-	"CPxFLVRecorder::ReceiveVideoData: m_oPxFLVMuxer->WriteVideoSample Fail.", true);*/
+	m_nLastVideoTimestamp = nTimeStamp;
 
 	return hr;
 }
@@ -246,38 +183,30 @@ HRESULT CPxFLVRecorder::ReceiveAudioData(
 		hr = NS_E_INVALID_PARAMETER;	
 		NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
 			"CPxFLVRecorder::ReceiveAudioData: NS_E_INVALID_PARAMETER, in_pIMC == NULL", true);
+	}*/
+
+	int nTimeStamp = static_cast <int> (in_pIMC->ui64Timestamp);
+
+	if (0 == m_nLastAudioTimestamp)
+	{
+		m_nLastAudioTimestamp = nTimeStamp;
 	}
 
-	unsigned char *pBuffer = NULL;
-	hr = in_pIMC ->GetDataPointer(&pBuffer);
-	NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-		"CPxFLVRecorder::ReceiveVideoData: NS_E_INVALID_PARAMETER,GetDataPointer error", true);
+	int nDeltaTs = nTimeStamp - m_nLastAudioTimestamp;
 
-	unsigned long ulDataBufferSize = 0;
-	hr = in_pIMC->GetDataBufferSize(&ulDataBufferSize);
-	NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-		"CPxFLVRecorder::ReceiveVideoData: NS_E_INVALID_PARAMETER,GetDataBufferSize error", true);
+	char szMsgBuffer[1024] = {0};
+	sprintf_s(szMsgBuffer, 1024, "CPxFLVRecorder::ReceiveAudioData timestamp: %d, nDeltaTs: %d ms\n", nTimeStamp, nDeltaTs);
+	//OutputDebugStringA(szMsgBuffer);
 
-	long lTimeStamp = 0;
-	hr = in_pIMC->GetTimeStamp(&lTimeStamp);
-	NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-		"CPxFLVRecorder::ReceiveVideoData: NS_E_INVALID_PARAMETER,GetTimeStamp error", true);*/
+	hr = m_oPxFLVMuxer->WriteAudioSample(in_nStreamID, 
+		                                 in_pIMC->lpBuffer, 
+		                                 in_pIMC->nDataLength, 
+		                                 nTimeStamp);
 
-	unsigned long ulDataBufferSize = 0;
-
-	//hr = m_oPxFLVMuxer->WriteAudioSample(in_nStreamID, in_pIMC->lpBuffer, ulDataBufferSize, static_cast<int> (lTimeStamp) );
-	/*NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-		"CPxFLVRecorder::ReceiveAudioData: m_oPxFLVMuxer->WriteAudioSample Fail.", true);*/
+	m_nLastAudioTimestamp = nTimeStamp;
 
 	return hr;
 }
-
-//HRESULT __stdcall CPxFLVRecorder::Switch(uint64_t in_ui64SwitchAt)
-//{
-//	HRESULT hr = NS_NOERROR;
-//
-//	return hr;
-//}
 
 HRESULT CPxFLVRecorder::End()
 {

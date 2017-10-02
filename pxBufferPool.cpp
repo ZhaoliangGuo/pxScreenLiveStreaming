@@ -101,7 +101,7 @@ void CPxBufferPool::SetBufferAt(int in_nPos, SPxBuffer *in_psBuffer )
 	m_vRingBuffer[in_nPos].eMediaType     = in_psBuffer->eMediaType;
 	memcpy(m_vRingBuffer[in_nPos].lpBuffer, in_psBuffer->lpBuffer, in_psBuffer->nDataLength);
 	m_vRingBuffer[in_nPos].nDataLength    = in_psBuffer->nDataLength;
-	m_vRingBuffer[in_nPos].tvTimestamp    = in_psBuffer->tvTimestamp;
+	m_vRingBuffer[in_nPos].ui64Timestamp    = in_psBuffer->ui64Timestamp;
 	m_vRingBuffer[in_nPos].bVideoKeyFrame = in_psBuffer->bVideoKeyFrame;
 
 	::LeaveCriticalSection(&m_csRingBuffer); 

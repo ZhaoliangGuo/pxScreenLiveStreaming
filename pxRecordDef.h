@@ -230,11 +230,6 @@ struct SPxRecordStreamProperty
 	int nAudioChannels;//音频声道数(1,2)
 	EPxRecordAudioSamples eAudioSamplesPerSecond;//音频采样率(16000,22050,32000,44100)
 	int nAudioBitsPerSampleint;//音频采样精度(8,16)
-	//EPxRecordAudioBits eAvgBitsPerSec;//(asf文件，Mp3为16384，mp2l2为32768)
-
-	//char szVideoIP[50];//视频IP
-	//char szAudioIP[50];//音频IP
-	//char szWMVMediaType[72*8];
 
 	SPxRecordStreamProperty()
 	{

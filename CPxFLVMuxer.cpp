@@ -1689,3 +1689,17 @@ HRESULT CPxFLVMuxer::GetBufferFrameType(unsigned char *in_pBuffer, int in_nBuffe
 	
 
 }
+
+HRESULT CPxFLVMuxer::SetStreamProperty(SPxRecordStreamProperty *in_psFileStreamProperty)
+{
+	HRESULT hr = NS_NOERROR;
+
+	if (NULL == in_psFileStreamProperty)
+	{
+		return NS_E_FAIL;
+	}
+
+	m_sRecordStreamProperty = *in_psFileStreamProperty;
+
+	return hr;
+}

@@ -31,6 +31,7 @@
     <None Include="ToDoList.txt">
       <Filter>资源文件</Filter>
     </None>
+    <None Include="ClassDiagram1.cd" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pxScreenLiveStreaming.h">

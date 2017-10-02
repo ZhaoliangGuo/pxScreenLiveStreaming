@@ -28,6 +28,10 @@ public:
 
 	HRESULT GetAVCNalType(LPVOID in_pBSBuf, const LONG in_nBSLen, ePxAVCNalType *out_eAVCNalType, int *out_nAVCNalLen);
 	HRESULT GetBufferFrameType(unsigned char *in_pBuffer, int in_nBufferLen, ePxAVCNalType *out_eBufferFrameType, int *out_nBufferFrameHeadLen, int *out_nBufferFrameLen);
+
+public:
+	HRESULT SetStreamProperty(SPxRecordStreamProperty *in_psFileStreamProperty);
+
 private:
 	SPxFLVRecorderFileHeader    m_sFlvFileHeader;
 	SPxFLVRecorderTagHeader     m_sFlvFileTagHeader;

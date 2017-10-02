@@ -5,6 +5,8 @@
 #include <vector>
 using namespace std;
 
+#include <assert.h> 
+
 #include "Windows.h"
 #include "pxBufferPool.h"
 #include "pxQueueBuffer.h"
@@ -35,13 +37,14 @@ extern UINT64 GetCurrentTimestamp();
 
 #define VIDEO_SAVE_BMP  0
 #define VIDEO_SAVE_YUV  0
+#define VIDEO_SAVE_YUV_FROM_BUFFERLIST 0
 #define VIDEO_SAVE_H264 0
-#define VIDEO_SAVE_H264_FROM_BUFFERLIST 1
+#define VIDEO_SAVE_H264_FROM_BUFFERLIST 0
 #define DEBUG_VIDEO_TIME_ANALYZE 0
 
-#define DEBUG_AUDIO_CAPTURE_PCM 1
-#define AUDIO_SAVE_PCM 1
-#define AUDIO_SAVE_PCM_FROM_BUFFERLIST 1
+#define DEBUG_AUDIO_CAPTURE_PCM 0
+#define AUDIO_SAVE_PCM 0
+#define AUDIO_SAVE_PCM_FROM_BUFFERLIST 0
 #define AUDIO_SAVE_AAC 0
 #define AUDIO_SAVE_AAC_FROM_BUFFERLIST 0
 
@@ -52,5 +55,14 @@ extern UINT64 GetCurrentTimestamp();
 	(((uint8_t*)(x))[1] << 16) | \
 	(((uint8_t*)(x))[2] <<  8) | \
 	((uint8_t*)(x))[3])
+
+#define DEFAULT_VIDEO_FRAMERATE (25)
+#define AUDIO_SAMPLE_PER_SECOND (44100)
+
+// 判断当前帧是否为关键帧
+// 如果是SPS PPS I帧 SEI为关键帧
+extern bool g_IsKeyFrame(const uint8_t *in_kui8Data, const int in_knSize);
+
+extern bool g_WriteFile(const char *in_kpszFileName, const uint8_t *in_kui8Data, const int in_knSize, char *in_kszMode = "ab+");
 
 #endif
