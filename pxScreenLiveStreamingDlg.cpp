@@ -513,8 +513,9 @@ DWORD WINAPI ThreadVideoEncoder(LPVOID lp)
 	pCodecCtx->time_base.num = 1;
 	pCodecCtx->time_base.den = DEFAULT_VIDEO_FRAMERATE;
 	pCodecCtx->gop_size      = DEFAULT_VIDEO_FRAMERATE;
-	pCodecCtx->max_b_frames  = 1;
+	pCodecCtx->max_b_frames  = 0;
 	pCodecCtx->pix_fmt       = AV_PIX_FMT_YUV420P;
+	pCodecCtx->codec_type    = AVMEDIA_TYPE_VIDEO;
 
 	if (codec_id == AV_CODEC_ID_H264)
 	{
