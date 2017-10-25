@@ -42,6 +42,9 @@ CPxFLVMuxer::CPxFLVMuxer()
 
 	m_lSysDValueVideoTimeSample = 0;
 	m_lSysDValueAudioTimeSample = 0;
+
+	m_bVideoSampleArrived = false;
+	m_bAudioSampleArrived = false;
 }
 
 CPxFLVMuxer::~CPxFLVMuxer()
@@ -543,6 +546,8 @@ HRESULT CPxFLVMuxer::WriteAudioSample(int in_nStreamNum, unsigned char  *in_pBuf
 
 	unsigned long ulTimeStamp = static_cast <unsigned long> (in_lTimeStamp);
 
+	//long ulTimeStamp = in_lTimeStamp;
+
 	//if(ulTimeStamp < 0 )
 	//{
 	//	hr = NS_E_INVALID_PARAMETER;
@@ -569,8 +574,9 @@ HRESULT CPxFLVMuxer::WriteAudioSample(int in_nStreamNum, unsigned char  *in_pBuf
 
 	//CNsAutoLock lock(&m_oCritDevice);
 	
-	if(	m_lAudioTimeSample == 0)
+	if(	m_lAudioTimeSample == 0 && !m_bAudioSampleArrived)
 	{
+		m_bAudioSampleArrived = true;
 		m_lAudioTimeSample = ulTimeStamp;
 		ulTimeStamp = ulTimeStamp - m_lAudioTimeSample;
 		QueryPerformanceCounter(&m_lnSysBeginAudioTimeSample);
@@ -900,20 +906,6 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 
 	unsigned long ulTimeStamp = static_cast <unsigned long> (in_lTimeStamp);
 
-	if(ulTimeStamp < 0 )
-	{
-		hr = NS_E_INVALID_PARAMETER;
-
-		sprintf_s(szMsgBuffer, 
-			FLV_MSG_BUFFER_SIZE, 
-			"CPxFLVMuxer::WriteVideoSample: NS_E_INVALID_PARAMETER,in_nTimeStamp(%lu) < 0, File Name : %s",
-			ulTimeStamp,
-			m_szVideoFileName);
-
-		//NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
-			//szMsgBuffer, true);
-	}
-
 	if(m_bFirstIFrame == false)
 	{
 		if(in_bIsKeyFrame == true)
@@ -939,10 +931,12 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 	int nPFrameHeadLen = 0;
 	bool bSpsFlag = false;
 
-	if(	m_lVideoTimeSample == 0)
+	if(	m_lVideoTimeSample == 0 && !m_bVideoSampleArrived)
 	{
+		m_bVideoSampleArrived = true;
+
 		m_lVideoTimeSample = ulTimeStamp;
-		ulTimeStamp = ulTimeStamp - m_lVideoTimeSample;
+		ulTimeStamp        = ulTimeStamp - m_lVideoTimeSample;
 		QueryPerformanceCounter(&m_lnSysBeginVideoTimeSample);
 	}
 	else
@@ -951,12 +945,14 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 		{
 			LARGE_INTEGER  lnNowTimeStamp;
 			QueryPerformanceCounter(&lnNowTimeStamp);
-			m_lSysDValueVideoTimeSample = (lnNowTimeStamp.QuadPart - m_lnSysBeginVideoTimeSample.QuadPart )/1000 + m_lVideoTimeSample - ulTimeStamp;
+			m_lSysDValueVideoTimeSample = (lnNowTimeStamp.QuadPart - m_lnSysBeginVideoTimeSample.QuadPart )/1000 
+				                          + m_lVideoTimeSample - ulTimeStamp;
 		}
+
 		ulTimeStamp = (ulTimeStamp + m_lSysDValueVideoTimeSample - m_lVideoTimeSample);
-		
 	}
 
+	// AVCDecoderConfigurationRecord
 	if (m_bAVCInited == false)
 	{	
 		hr = GetAVCNalType(in_pBuffer, in_nBufferLen, &eAVCNalType, &nAVCNalLen);
@@ -966,6 +962,7 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 			sprintf( chError,"CPxFLVMuxer::WriteVideoSample: GetAVCNalType error,eAVCNalType is %d,nAVCNalLen is %d",eAVCNalType,nAVCNalLen);
 		    //NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr, chError, true);
 		}
+
 		if (eAVCNalType == H264NT_SPS)
 		{
 			nSpsHeadLen = nAVCNalLen;
@@ -1027,11 +1024,17 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 			unsigned short usPpsLen = 0;
 			for (nIBuffer= nSpsHeadLen + usSpsLen + nPpsHeadLen; nIBuffer<in_nBufferLen - nSpsHeadLen; nIBuffer++)
 			{
-				if (in_pBuffer[nIBuffer] == 0x00 && in_pBuffer[nIBuffer + 1] == 0x00 &&	in_pBuffer[nIBuffer + 2] == 0x00 && in_pBuffer[nIBuffer + 3] == 0x01)
+				if (   in_pBuffer[nIBuffer]     == 0x00 
+					&& in_pBuffer[nIBuffer + 1] == 0x00 
+					&& in_pBuffer[nIBuffer + 2] == 0x00 
+					&& in_pBuffer[nIBuffer + 3] == 0x01)
 				{
 					break;
 				}
-				if (in_pBuffer[nIBuffer] == 0x00 && in_pBuffer[nIBuffer + 1] == 0x00 &&	in_pBuffer[nIBuffer + 2] == 0x01)
+
+				if (   in_pBuffer[nIBuffer]     == 0x00 
+					&& in_pBuffer[nIBuffer + 1] == 0x00 
+					&&in_pBuffer[nIBuffer + 2]  == 0x01)
 				{
 					break;
 				}
@@ -1041,7 +1044,6 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 				usPpsLen = nIBuffer - (nSpsHeadLen + usSpsLen + nPpsHeadLen);
 			}
 
-
 			ePxAVCNalType out_eBufferFrameType = H264NT_NAL;
 			int out_nBufferFrameHeadLen = 0;
 			int out_nBufferFrameLen = 0;
@@ -1050,13 +1052,16 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 			{
 				if( (nSpsHeadLen + usSpsLen + nPpsHeadLen +  nBufferNextFrameLen) < in_nBufferLen)
 				{
-					hr = GetBufferFrameType(in_pBuffer+nSpsHeadLen + usSpsLen + nPpsHeadLen  + nBufferNextFrameLen,(in_nBufferLen-(nSpsHeadLen + usSpsLen + nPpsHeadLen + nBufferNextFrameLen)), &out_eBufferFrameType, &out_nBufferFrameHeadLen, &out_nBufferFrameLen);
+					hr = GetBufferFrameType(in_pBuffer+nSpsHeadLen + usSpsLen + nPpsHeadLen  + nBufferNextFrameLen,
+						                   (in_nBufferLen-(nSpsHeadLen + usSpsLen + nPpsHeadLen + nBufferNextFrameLen)), 
+										   &out_eBufferFrameType, &out_nBufferFrameHeadLen, &out_nBufferFrameLen);
 					if(FAILED(hr))
 					{
 						char chError[200];
 						sprintf( chError,"CCPxFLVMuxer::WriteVideoSample: GetBufferFrameType error");
 						//NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr, chError, true);
 					}
+
 					switch(out_eBufferFrameType)
 					{
 					case H264NT_SPS:
@@ -1075,7 +1080,8 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 						nPFrameHeadLen = out_nBufferFrameHeadLen;
 						break;
 					}
-					nBufferNextFrameLen = nBufferNextFrameLen+out_nBufferFrameHeadLen+out_nBufferFrameLen;
+
+					nBufferNextFrameLen = nBufferNextFrameLen + out_nBufferFrameHeadLen + out_nBufferFrameLen;
 				}
 				else
 				{
@@ -1086,7 +1092,6 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 				}
 			}	
 			
-
 			usPpsLen = htons(usPpsLen);
 			memcpy(uchAVCDecoderConfigurationRecord + nBufferPos, &usPpsLen, sizeof(unsigned short));
 			usPpsLen = ntohs(usPpsLen);
@@ -1118,9 +1123,9 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 			m_sFlvFileTagHeader.uchTimestamp[2] = (BYTE)((ulTimeStamp >>  0) & 0xff);
 			m_sFlvFileTagHeader.uchTimestampExtended = (BYTE)((ulTimeStamp >> 24) & 0xff);
 
-			m_sFlvFileTagHeader.uchStreamID[0]       = 0x00;
-			m_sFlvFileTagHeader.uchStreamID[1]       = 0x00;
-			m_sFlvFileTagHeader.uchStreamID[2]       = 0x00;
+			m_sFlvFileTagHeader.uchStreamID[0]  = 0x00;
+			m_sFlvFileTagHeader.uchStreamID[1]  = 0x00;
+			m_sFlvFileTagHeader.uchStreamID[2]  = 0x00;
 			
 			hr = Write((char *)&m_sFlvFileTagHeader, sizeof(SPxFLVRecorderTagHeader));
 			if(FAILED(hr))
@@ -1159,7 +1164,7 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 			in_nBufferLen = in_nBufferLen - (nSpsHeadLen + usSpsLen + nPpsHeadLen + nBufferNextFrameLen - out_nBufferFrameHeadLen);
 			m_bAVCInited = true;
 		}
-	}
+	} // end of 'AVC Sequence header': AVCDecoderConfigurationRecord
 
 	if (m_bAVCInited == true && in_nBufferLen > 4)
 	{
@@ -1177,7 +1182,7 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 			//NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr, chError, true);
 		}
 
-		if ( eAVCNalType == H264NT_SPS )
+		if (H264NT_SPS == eAVCNalType || H264NT_SEI == eAVCNalType)
 		{
 			nSpsHeadLen = nAVCNalLen;
 
@@ -1188,9 +1193,11 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 
 			while(out_eBufferFrameType != H264NT_SLICE_IDR && out_eBufferFrameType != H264NT_SLICE)
 			{
-				if( (nSpsHeadLen+nBufferNextFrameLen) < in_nBufferLen)
+				if( (nSpsHeadLen + nBufferNextFrameLen) < in_nBufferLen)
 				{
-					hr = GetBufferFrameType(in_pBuffer+nSpsHeadLen+nBufferNextFrameLen,(in_nBufferLen-nSpsHeadLen-nBufferNextFrameLen), &out_eBufferFrameType, &out_nBufferFrameHeadLen, &out_nBufferFrameLen);
+					hr = GetBufferFrameType(in_pBuffer + nSpsHeadLen + nBufferNextFrameLen,
+						                   (in_nBufferLen - nSpsHeadLen - nBufferNextFrameLen), 
+										   &out_eBufferFrameType, &out_nBufferFrameHeadLen, &out_nBufferFrameLen);
 					if(FAILED(hr))
 					{
 						char chError[200];
@@ -1215,7 +1222,8 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 						nPFrameHeadLen = out_nBufferFrameHeadLen;
 						break;
 					}
-					nBufferNextFrameLen = nBufferNextFrameLen+out_nBufferFrameHeadLen+out_nBufferFrameLen;
+
+					nBufferNextFrameLen = nBufferNextFrameLen + out_nBufferFrameHeadLen + out_nBufferFrameLen;
 				}
 				else
 				{
@@ -1224,16 +1232,19 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 					//NsLogNotifyA_Add_file(0,0,chError);
 					break;
 				}
-			}	
+			}
+
 			char chBufferHeader[4];
 			unsigned int unTagSize = 0;
 			if(out_eBufferFrameType == H264NT_SLICE_IDR || out_eBufferFrameType == H264NT_SLICE)
 			{
-				chBufferHeader[0] = ((in_nBufferLen - nSpsHeadLen - nBufferNextFrameLen) >> 24) & 0xff;
-				chBufferHeader[1] = ((in_nBufferLen - nSpsHeadLen - nBufferNextFrameLen) >> 16) & 0xff;
-				chBufferHeader[2] = ((in_nBufferLen - nSpsHeadLen - nBufferNextFrameLen) >>  8) & 0xff;
-				chBufferHeader[3] = ((in_nBufferLen - nSpsHeadLen - nBufferNextFrameLen) >>  0) & 0xff;
-				unTagSize = in_nBufferLen - nSpsHeadLen - nBufferNextFrameLen + 4 + sizeof(sPxFLVRecorderVideoData) + sizeof(sPxFLVRecorderAVCVideoData);//数据总长度-开头NAL-数据长度（4）-video-acv
+				int nDataSize = (in_nBufferLen - nSpsHeadLen - nBufferNextFrameLen);
+				chBufferHeader[0] = (nDataSize >> 24) & 0xff;
+				chBufferHeader[1] = (nDataSize >> 16) & 0xff;
+				chBufferHeader[2] = (nDataSize >>  8) & 0xff;
+				chBufferHeader[3] = (nDataSize >>  0) & 0xff;
+				unTagSize = nDataSize + 4 + sizeof(sPxFLVRecorderVideoData) + sizeof(sPxFLVRecorderAVCVideoData);
+				//数据总长度-开头NAL-数据长度（4）-video-acv
 			}
 			else
 			{
@@ -1251,6 +1262,18 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 			m_sFlvFileTagHeader.uchTimestamp[1] = (BYTE)((ulTimeStamp >>  8) & 0xff);
 			m_sFlvFileTagHeader.uchTimestamp[2] = (BYTE)((ulTimeStamp >>  0) & 0xff);
 			m_sFlvFileTagHeader.uchTimestampExtended = (BYTE)((ulTimeStamp >> 24) & 0xff);
+
+			// test by gzl 20171019
+			unsigned int uiTimeStamp = 0;
+			uiTimeStamp =   (m_sFlvFileTagHeader.uchTimestampExtended << 24)
+				+ (m_sFlvFileTagHeader.uchTimestamp[0]      << 16)
+				+ (m_sFlvFileTagHeader.uchTimestamp[1]      << 8) 
+				+ (m_sFlvFileTagHeader.uchTimestamp[2]      << 0);
+			char szMsgBuffer[1024] = {0};
+			sprintf_s(szMsgBuffer, 1024, "CPxFLVMuxer::WriteVideoSample SPS &&& Video uiTimeStamp:%u, FrameType:SPS", 
+				      uiTimeStamp);
+			OutputDebugStringA(szMsgBuffer);
+			// test by gzl end
 
 			if(out_eBufferFrameType == H264NT_SLICE_IDR)
 			{
@@ -1317,10 +1340,8 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 			}
 
 			m_nLastTagSize = unTagSize + sizeof(SPxFLVRecorderTagHeader);
-		    //m_dwDurationPosition = in_nTimeStamp;
 			m_dFLVFileDuration = ulTimeStamp;
-	    }
-	
+	}
 	else if ( eAVCNalType == H264NT_SLICE_IDR ||  eAVCNalType == H264NT_SLICE)
 	{
 		nSpsHeadLen = nAVCNalLen;
@@ -1363,9 +1384,9 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 		if(out_eBufferFrameType == H264NT_SLICE_IDR )
 		{
 			chBufferHeader[0] = ((in_nBufferLen - nIFrameHeadLen ) >> 24) & 0xff;
-			chBufferHeader[1] = ((in_nBufferLen - nIFrameHeadLen) >> 16) & 0xff;
-			chBufferHeader[2] = ((in_nBufferLen - nIFrameHeadLen) >>  8) & 0xff;
-			chBufferHeader[3] = ((in_nBufferLen - nIFrameHeadLen) >>  0) & 0xff;
+			chBufferHeader[1] = ((in_nBufferLen - nIFrameHeadLen)  >> 16) & 0xff;
+			chBufferHeader[2] = ((in_nBufferLen - nIFrameHeadLen)  >>  8) & 0xff;
+			chBufferHeader[3] = ((in_nBufferLen - nIFrameHeadLen)  >>  0) & 0xff;
 			unTagSize = in_nBufferLen - nIFrameHeadLen + 4 + sizeof(sPxFLVRecorderVideoData) + sizeof(sPxFLVRecorderAVCVideoData);//数据总长度-开头NAL-数据长度（4）-video-acv
 
 		}
@@ -1386,6 +1407,7 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 			sprintf( chError,"CCPxFLVMuxer::WriteVideoSample: NS_E_INVALID_PARAMETER,out_eBufferFrameType=%d", out_eBufferFrameType);
 			//NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowDeviceHK, keLogPkgDirectShowDeviceHKFuncGeneral, hr, chError, true);
 		}
+
 		m_sFlvFileTagHeader.uchTagType = 0x09;
 		m_sFlvFileTagHeader.uchDataSize[0] = (unTagSize >> 16) & 0xff;
 		m_sFlvFileTagHeader.uchDataSize[1] = (unTagSize >>  8) & 0xff;
@@ -1394,6 +1416,19 @@ HRESULT CPxFLVMuxer::WriteVideoSample(int in_nStreamNum, unsigned char  *in_pBuf
 		m_sFlvFileTagHeader.uchTimestamp[1] = (BYTE)((ulTimeStamp >>  8) & 0xff);
 		m_sFlvFileTagHeader.uchTimestamp[2] = (BYTE)((ulTimeStamp >>  0) & 0xff);
 		m_sFlvFileTagHeader.uchTimestampExtended = (BYTE)((ulTimeStamp >> 24) & 0xff);
+
+		// test by gzl 20171019
+		unsigned int uiTimeStamp = 0;
+		uiTimeStamp =   (m_sFlvFileTagHeader.uchTimestampExtended << 24)
+			+ (m_sFlvFileTagHeader.uchTimestamp[0]      << 16)
+			+ (m_sFlvFileTagHeader.uchTimestamp[1]      << 8) 
+			+ (m_sFlvFileTagHeader.uchTimestamp[2]      << 0);
+		char szMsgBuffer[1024] = {0};
+		sprintf_s(szMsgBuffer, 1024, "CPxFLVMuxer::WriteVideoSample &&& Video uiTimeStamp:%u, FrameType:%s", uiTimeStamp,
+			out_eBufferFrameType == H264NT_SLICE_IDR ? "KeyFrame" : "P or B Frame");
+		OutputDebugStringA(szMsgBuffer);
+		// test by gzl end
+
 		if(out_eBufferFrameType == H264NT_SLICE_IDR)
 		{
 			m_sFlvFileVideoData.uchFrameType = 0x01;
@@ -1495,6 +1530,7 @@ HRESULT CPxFLVMuxer::FlushFile(void)
 	if (m_fpFLVFile)
 	{
 		fflush(m_fpFLVFile);
+		m_fpFLVFile = NULL;
 	}
 
 	return hr;
@@ -1618,20 +1654,22 @@ HRESULT CPxFLVMuxer::GetAVCNalType(LPVOID in_pBSBuf, const LONG in_nBSLen, ePxAV
 
 HRESULT CPxFLVMuxer::GetBufferFrameType(unsigned char *in_pBuffer, int in_nBufferLen, ePxAVCNalType *out_eBufferFrameType, int *out_nBufferFrameHeadLen, int *out_nBufferFrameLen)
 {
-	HRESULT hr =NS_NOERROR;
+	HRESULT hr = NS_NOERROR;
+
 	if( in_pBuffer  == NULL || in_nBufferLen < 5)
 	{
 		hr = NS_E_INVALID_PARAMETER;
 		//NSD_SAFE_REPORT_ERROR_RETURN(keLogPkgDirectShowFLVRecoder, keLogPkgDirectShowFLVRecoderFuncGeneral, hr,
 			//"CPxFLVMuxer::GetBufferFrameType: NS_E_INVALID_PARAMETER,in_pBSBuf is NULL or in_nBSLen <5", true);
 	}
+
 	int nIBuffer = 0;
-	for( ; nIBuffer<in_nBufferLen - 4 ; nIBuffer++)
+	for( ; nIBuffer < in_nBufferLen - 4 ; nIBuffer++)
 	{
 		if ((in_pBuffer[nIBuffer] == 0x00 && in_pBuffer[nIBuffer + 1] == 0x00 && in_pBuffer[nIBuffer + 2] == 0x00 && in_pBuffer[nIBuffer + 3] == 0x01))
 		{
 			*out_nBufferFrameHeadLen = 4;
-			switch(in_pBuffer[nIBuffer+4])
+			switch(in_pBuffer[nIBuffer + 4])
 			{
 			case 0x67:
 				*out_eBufferFrameType = H264NT_SPS;
@@ -1649,12 +1687,14 @@ HRESULT CPxFLVMuxer::GetBufferFrameType(unsigned char *in_pBuffer, int in_nBuffe
 				*out_eBufferFrameType = H264NT_SLICE;
 				break;		
 			}
+
 			break;
 		}
+
 		if ((in_pBuffer[nIBuffer] == 0x00 && in_pBuffer[nIBuffer + 1] == 0x00 && in_pBuffer[nIBuffer + 2] == 0x01))
 		{
 			*out_nBufferFrameHeadLen = 3;
-			switch(in_pBuffer[nIBuffer+3])
+			switch(in_pBuffer[nIBuffer + 3])
 			{
 			case 0x67:
 				*out_eBufferFrameType = H264NT_SPS;
@@ -1672,9 +1712,11 @@ HRESULT CPxFLVMuxer::GetBufferFrameType(unsigned char *in_pBuffer, int in_nBuffe
 				*out_eBufferFrameType = H264NT_SLICE;
 				break;		
 			}
+
 			break;
 		}
 	}
+
 	if(nIBuffer == (in_nBufferLen - 4))
 	{
 		hr = NS_E_INVALID_PARAMETER;
@@ -1685,9 +1727,8 @@ HRESULT CPxFLVMuxer::GetBufferFrameType(unsigned char *in_pBuffer, int in_nBuffe
 	{
 		*out_nBufferFrameLen = nIBuffer ;
 	}
-	return hr;
-	
 
+	return hr;
 }
 
 HRESULT CPxFLVMuxer::SetStreamProperty(SPxRecordStreamProperty *in_psFileStreamProperty)

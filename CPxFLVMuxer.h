@@ -57,8 +57,10 @@ private:
 	//CNsCriticalSection          m_oCritDevice;
 
 	long                        m_lVideoTimeSample;
-	long                        m_lAudioTimeSample;
+	bool                        m_bVideoSampleArrived;
 
+	long                        m_lAudioTimeSample;
+	long                        m_bAudioSampleArrived;
 
 	LARGE_INTEGER               m_lnSysBeginVideoTimeSample;
 	LARGE_INTEGER               m_lnSysBeginAudioTimeSample;

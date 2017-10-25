@@ -974,7 +974,7 @@ DWORD WINAPI ThreadAudioEncoder(LPVOID lp)
 			SPxBuffer *psPxBuffer = g_oPCMQueueBuffer.Front();
 			if (NULL == psPxBuffer->lpBuffer)
 			{
-				Sleep(2);
+				Sleep(1);
 
 				continue;
 			}
@@ -1177,6 +1177,7 @@ DWORD WINAPI ThreadFlvRecorder(LPVOID lp)
 #if VIDEO_SAVE_H264_FROM_BUFFERLIST
 				g_WriteFile("output_v2.h264", psPxBuffer->lpBuffer, psPxBuffer->nDataLength);
 #endif
+
 				oFLVRecorder.ReceiveVideoData(2, "127.0.0.1", psPxBuffer);
 			}
 
